@@ -1,0 +1,15 @@
+## TODO
+
+JH: 
+- write script for auto-downloading new data and adding to drive / unpacking from drive
+- get argo float data
+- plot the "test" data
+- write opendrift baseline
+
+JGS: 
+- familiarize with papers / problem setting
+- propose favourite solution and implement
+
+TM: 
+- gather dataset for weather / surface current + predictions 
+
