@@ -1,5 +1,8 @@
 ## TODO
 
+Unassigned: 
+- write evaluation function according to rules from DARPA
+
 JH: 
 - write script for auto-downloading new data and adding to drive / unpacking from drive
 - get argo float data
