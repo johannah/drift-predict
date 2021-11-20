@@ -13,8 +13,48 @@ import sys
 from IPython import embed; 
 
 DATA_DIR = '/Volumes/seahorse/2021-drifters/'
+comp_start_time = datetime.datetime(2021, 11, 1, 12, 0, 0)
 
+def get_weather(start_time=comp_start_time):
+    #download_predictions(DATA_DIR)
+    pred_dir = os.path.join(DATA_DIR, 'pred')
+    avail_dates = glob(os.path.join(pred_dir, '2021*'))
+    # for days older than today, use nowcast date 
+    today = datetime.datetime.utcnow()
+    assert start_time <= today
+    date = start_time
+    weather_files = []
+    today_str = "%s%s%s"%(today.year, today.month, today.day)
+    while date < today:
+        date_str = "%s%s%s"%(date.year, date.month, date.day)
+        # get hindcast data
+        if date < today:
+            print('getting hindcast data for %s'%date)
+            search_path = os.path.join(pred_dir, date_str, 'rtofs_glo_2ds_n0*progremap.nc')
+            files = glob(search_path)
+            print('found %s files' %len(files))
+            if not len(files):
+                print("WARNING no files found")
+                print(search_path)
+            weather_files.extend(sorted(files))
+        date = date+ datetime.timedelta(days=1)
+
+    # try looking for today data 
+    search_path = os.path.join(pred_dir, today_str, 'rtofs_glo_2ds_*progremap.nc')
+    files = glob(search_path)
+    print('found %s today files' %len(files))
+    if not len(files):
+        print('using yesterdays forecast data')
+        yes = today + datetime.timedelta(days=-1)
+        search_path = os.path.join(pred_dir, yes_str, 'rtofs_glo_2ds_*progremap.nc')
+        files = glob(search_path)
+        print('found %s yesteday files' %len(files))
+    weather_files.extend(sorted(files))
+    return weather_files
+ 
+    
 def make_weather_clips(spot_names, df):
+    # NOT NEEDED
     extents = []
     spot_dict = {}
     data = {}
@@ -34,9 +74,9 @@ def make_weather_clips(spot_names, df):
             max_lon = np.round(data[spot]['longitude'].max() + 1)
             extents.append((min_lat, max_lat, min_lon, max_lon))
             spot_dict[spot] = extents[-1]
-    download_predictions(DATA_DIR)
     unique_extents = set(extents)
     print('have %s unique extents' %len(unique_extents))
+    download_predictions(DATA_DIR)
     pred_dir = os.path.join(DATA_DIR, 'pred')
     dates = glob(os.path.join(pred_dir, '2021*'))
     extent_dict = {}
@@ -107,6 +147,11 @@ root group (NETCDF4 data model, file format HDF5):
         pred_dir = os.path.join(data_dir, 'pred', date_str)
         if not os.path.exists(pred_dir):
             os.makedirs(pred_dir)
+        # search for old ls files
+        old_files = glob(os.path.join(pred_dir, 'ls-l*'))
+        for old in old_files:
+            os.remove(old)
+
         wget_ls = 'wget https://nomads.ncep.noaa.gov/pub/data/nccf/com/rtofs/prod/rtofs.%s/ls-l -P %s'%(date_str, pred_dir)
         os.system(wget_ls)
         ls_fpath = os.path.join(pred_dir, 'ls-l')
@@ -116,16 +161,22 @@ root group (NETCDF4 data model, file format HDF5):
             get_files = []
             for ff in ls:
                 if 'prog.nc' in ff:
-                    # rtofs_glo_2ds_f000_prog.nc
-                    # rtofs_glo_2ds_n000_prog.nc
+                    # TODO prefer nowcast
+                    # rtofs_glo_2ds_f000_prog.nc # future
+                    # rtofs_glo_2ds_n000_prog.nc # nowcast
                     get_files.append(ff.split(' ')[-1].strip())
                     target_path = os.path.join(pred_dir, get_files[-1]) 
                     if not os.path.exists(target_path):
                         wget_ls = 'wget https://nomads.ncep.noaa.gov/pub/data/nccf/com/rtofs/prod/rtofs.%s/%s -P %s'%(date_str, get_files[-1], pred_dir)
                         print('downloading', get_files[-1])
                         os.system(wget_ls)
+                    nn_path = target_path.replace('.nc', 'remap.nc')
+                    if not os.path.exists(nn_path):
+                        # remap colinear - should check this!
+                        cmd = 'cdo remapnn,global_.08 %s %s'%(target_path, nn_path)
+                        os.system(cmd)
 
-def load_data(search_path='data/challenge_*day*.json'):
+def load_data(search_path='data/challenge_*day*.json', start_date=comp_start_time):
     # load sorted dates
     dates = sorted(glob(search_path))
     bad_spots = []
@@ -137,31 +188,34 @@ def load_data(search_path='data/challenge_*day*.json'):
     track_df = pd.DataFrame(columns=track_columns)
     for cnt, date in enumerate(dates):  
         print('loading date: %s'% date)
-        day_data = json.load(open(date))['all_data']
-        for spot in range(len(day_data)):
-            spot_day_data = day_data[spot]['data']
-            this_track_df = pd.DataFrame(spot_day_data['track'])
-            this_wave_df = pd.DataFrame(spot_day_data['waves'])
-            this_track_df['spotterId'] = spot_day_data['spotterId']
-            this_wave_df['spotterId'] = spot_day_data['spotterId']
-            this_track_df['day'] = cnt
-            this_wave_df['day'] = cnt
-            # get date from filename
-            st = date.index('sofar')+len('sofar_')
-            en = st + 8
-            this_track_df['date'] = date[st:en]
-            this_wave_df['date'] = date[st:en]      
-            if len(this_track_df.columns) != len(track_columns):
-                # some spots have no data
-                bad_spots.append((date, spot, spot_day_data))
-            else:
-                track_df = track_df.append(this_track_df)
+        st = date.index('sofar')+len('sofar_')
+        en = st + 8
+        date_str = date[st:en]
+        date_ts = datetime.datetime(int(date_str[:4]), int(date_str[4:6]), int(date_str[6:]))
+        if date_ts >= start_date:
+            day_data = json.load(open(date))['all_data']
+            for spot in range(len(day_data)):
+                spot_day_data = day_data[spot]['data']
+                this_track_df = pd.DataFrame(spot_day_data['track'])
+                this_wave_df = pd.DataFrame(spot_day_data['waves'])
+                this_track_df['spotterId'] = spot_day_data['spotterId']
+                this_wave_df['spotterId'] = spot_day_data['spotterId']
+                this_track_df['day'] = cnt
+                this_wave_df['day'] = cnt
+                # get date from filename
+                this_track_df['date'] = date_str 
+                this_wave_df['date'] = date_str
+                if len(this_track_df.columns) != len(track_columns):
+                    # some spots have no data
+                    bad_spots.append((date, spot, spot_day_data))
+                else:
+                    track_df = track_df.append(this_track_df)
  
-            if len(this_wave_df.columns) != len(wave_columns):
-                # some spots have no data
-                bad_spots.append((date, spot, spot_day_data))
-            else:
-                wave_df = wave_df.append(this_wave_df)
+                if len(this_wave_df.columns) != len(wave_columns):
+                    # some spots have no data
+                    bad_spots.append((date, spot, spot_day_data))
+                else:
+                    wave_df = wave_df.append(this_wave_df)
 
     track_df = track_df.drop_duplicates()
     track_df['real_sample'] =  1 
