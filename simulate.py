@@ -32,7 +32,7 @@ from opendrift.models.physics_methods import wind_drift_factor_from_trajectory, 
 from utils import DATA_DIR, download_predictions, load_environment, make_datetimes_from_args
 from utils import load_drifter_data, plot_spot_tracks
 
-def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter=False, end_at_drifter=False, plot_plot=False, plot_gif=False, num_seeds=100, seed_radius=10, wind_drift_factor_max=.4):
+def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter=False, end_at_drifter=False, plot_plot=False, plot_gif=False, num_seeds=100, seed_radius=10, wind_drift_factor_max=.04):
     # create random wind drift factors
     wind_drift_factor = np.random.uniform(0, wind_drift_factor_max, num_seeds)
     spot_df = track_df[track_df['spotterId'] == spot]
@@ -92,7 +92,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=1110)
     parser.add_argument('--num-seeds', default=100, type=int, help='num particles to simulate')
     parser.add_argument('--seed-radius', default=10, type=int, help='meters squared region to seed particles in simulation')
-    parser.add_argument('--wind-drift-factor-max', '-wdm', default=0.4, help='max wind drift factor to use when seeding particles. default was found experimentally with get_wind_drift_factor.py')
+    parser.add_argument('--wind-drift-factor-max', '-wdm', default=0.04, type=float, help='max wind drift factor to use when seeding particles. default was found experimentally with get_wind_drift_factor.py')
     parser.add_argument('--start-year', default=2021, type=int)
     parser.add_argument('--start-month', default=11, type=int)
     parser.add_argument('--start-day', default=17, type=int)
@@ -114,9 +114,9 @@ if __name__ == '__main__':
     now = datetime.datetime.now(pytz.UTC)
     now_str = now.strftime("%Y%m%d-%H%M")
     start_time, start_str, end_time, end_str = make_datetimes_from_args(args)
-    spot_dir = os.path.join(DATA_DIR, 'results', 'spots_N%s_S%s_E%s_DS%s_TE%s_R%sG%sW%sN%s'%(now_str, 
+    spot_dir = os.path.join(DATA_DIR, 'results', 'spots_N%s_S%s_E%s_DS%s_DE%s_R%sG%sW%sN%s_WD%.02f'%(now_str, 
                                      start_str, end_str, int(args.start_at_drifter), int(args.end_at_drifter), 
-                                     int(args.use_rtofs), int(args.use_gfs), int(args.use_ww3), int(args.use_ncep)))
+                                     int(args.use_rtofs), int(args.use_gfs), int(args.use_ww3), int(args.use_ncep), args.wind_drift_factor_max))
     if not os.path.exists(spot_dir):
         os.makedirs(spot_dir)
         os.makedirs(os.path.join(spot_dir, 'python'))

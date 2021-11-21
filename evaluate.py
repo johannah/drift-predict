@@ -86,7 +86,8 @@ def evaluate_spot(spot_df, pred_nc):
     for s in range(pred_lons.shape[1]):
         distances.append(distance_between_trajectories(pred_lons[:,s], pred_lats[:,s], drifter_lons, drifter_lats))
 
-    embed()
+    return np.array(distances)
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
@@ -97,7 +98,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     np.random.seed(args.seed)
     load_dir = args.load_dir
-
     pred_results = glob(os.path.join(args.load_dir, 'SPOT*.nc'))
     print('found %s predictions'%len(pred_results))
     if len(pred_results):
@@ -105,10 +105,20 @@ if __name__ == '__main__':
         start_time, start_str, end_time, end_str = make_datetimes_from_args(load_args)
         #readers = load_environment(start_time, download=False, use_gfs=load_args.use_gfs, use_ncep=load_args.use_ncep, use_ww3=load_args.use_ww3, use_rtofs=load_args.use_rtofs)
         track_df, wave_df = load_drifter_data(search_path='data/challenge*day*JSON.json', start_date=start_time)
+        spot_distances = {}
+        running_sum = []
         for spot_pred_path in pred_results:
             spot = (os.path.split(spot_pred_path)[1]).split('.')[0]
             spot_df = track_df[track_df['spotterId'] == spot]
             spot_nc = nc.Dataset(spot_pred_path)
-            evaluate_spot(spot_df, spot_nc)
+            distance = evaluate_spot(spot_df, spot_nc)
+            min_error = distance.sum(1).min()
+            spot_distances[spot] = distance
+            print(spot, min_error)
+            running_sum.append(min_error)
+
+        print(np.sum(running_sum))
+        pickle.dump(spot_distances, open(os.path.join(args.load_dir, 'result_distances.pkl'), 'wb'))
+        embed()
 
 
