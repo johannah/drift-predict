@@ -1,17 +1,15 @@
 # drift-predict
 
 
-## Download data
-Data can be downloaded from competition website or from our [drive](https://drive.google.com/drive/folders/1Imm7ydZI_kdMkwr_2azvMgZxgulqqpHT?usp=sharing). 
 
-Data is expected to be in a directory called "data"
-
-TODO explain data downloads / setup
 
 ## Setup
 
-- download gfs, nces data if desired (not required) 
+- clone and install [Opendrift](https://github.com/OpenDrift/opendrift.git)
 - set DATA_DIR in utils.py 
+
+## Download data
+- download gfs, nces data if desired (not required) 
 
 ## To run predictions with rtofs datasets
 
