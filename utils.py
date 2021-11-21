@@ -9,18 +9,18 @@ import pandas as pd
 from glob import glob
 import os
 import sys
-
+import pytz
 from IPython import embed; 
 
 DATA_DIR = '/Volumes/seahorse/2021-drifters/'
-comp_start_time = datetime.datetime(2021, 11, 1, 12, 0, 0)
+comp_start_time = datetime.datetime(2021, 11, 1, 17, 0, 0, 0, pytz.UTC)
+comp_end_time = comp_start_time + datetime.timedelta(days=10)
 
 def get_weather(start_time=comp_start_time):
-    #download_predictions(DATA_DIR)
     pred_dir = os.path.join(DATA_DIR, 'pred')
     avail_dates = glob(os.path.join(pred_dir, '2021*'))
     # for days older than today, use nowcast date 
-    today = datetime.datetime.utcnow()
+    today = pytz.utc.localize(datetime.datetime.utcnow())
     assert start_time <= today
     date = start_time
     weather_files = []
@@ -28,7 +28,7 @@ def get_weather(start_time=comp_start_time):
     while date < today:
         date_str = "%s%s%s"%(date.year, date.month, date.day)
         # get hindcast data
-        if date < today:
+        if date <= today:
             print('getting hindcast data for %s'%date)
             search_path = os.path.join(pred_dir, date_str, 'rtofs_glo_2ds_n0*progremap.nc')
             files = glob(search_path)
@@ -40,12 +40,13 @@ def get_weather(start_time=comp_start_time):
         date = date+ datetime.timedelta(days=1)
 
     # try looking for today data 
-    search_path = os.path.join(pred_dir, today_str, 'rtofs_glo_2ds_*progremap.nc')
+    search_path = os.path.join(pred_dir, today_str, 'rtofs_glo_2ds_f*progremap.nc')
     files = glob(search_path)
     print('found %s today files' %len(files))
     if not len(files):
         print('using yesterdays forecast data')
         yes = today + datetime.timedelta(days=-1)
+        yes_str = "%s%s%s"%(yes.year, yes.month, yes.day)
         search_path = os.path.join(pred_dir, yes_str, 'rtofs_glo_2ds_*progremap.nc')
         files = glob(search_path)
         print('found %s yesteday files' %len(files))
@@ -166,6 +167,7 @@ root group (NETCDF4 data model, file format HDF5):
                     # rtofs_glo_2ds_n000_prog.nc # nowcast
                     get_files.append(ff.split(' ')[-1].strip())
                     target_path = os.path.join(pred_dir, get_files[-1]) 
+                    print(target_path)
                     if not os.path.exists(target_path):
                         wget_ls = 'wget https://nomads.ncep.noaa.gov/pub/data/nccf/com/rtofs/prod/rtofs.%s/%s -P %s'%(date_str, get_files[-1], pred_dir)
                         print('downloading', get_files[-1])
@@ -176,7 +178,7 @@ root group (NETCDF4 data model, file format HDF5):
                         cmd = 'cdo remapnn,global_.08 %s %s'%(target_path, nn_path)
                         os.system(cmd)
 
-def load_data(search_path='data/challenge_*day*.json', start_date=comp_start_time):
+def load_data(search_path='data/challenge_*day*.json', start_date=comp_start_time, end_date=comp_end_time):
     # load sorted dates
     dates = sorted(glob(search_path))
     bad_spots = []
@@ -186,13 +188,15 @@ def load_data(search_path='data/challenge_*day*.json', start_date=comp_start_tim
                                                   'timestamp', 'latitude', 'longitude', 'spotterId', 'day', 'date']
     wave_df = pd.DataFrame(columns=wave_columns)
     track_df = pd.DataFrame(columns=track_columns)
+    start_day = start_date+datetime.timedelta(days=-2)
     for cnt, date in enumerate(dates):  
-        print('loading date: %s'% date)
         st = date.index('sofar')+len('sofar_')
         en = st + 8
         date_str = date[st:en]
-        date_ts = datetime.datetime(int(date_str[:4]), int(date_str[4:6]), int(date_str[6:]))
-        if date_ts >= start_date:
+        date_ts = datetime.datetime(int(date_str[:4]), int(date_str[4:6]), int(date_str[6:]), 0, 0, 0, 0, pytz.UTC)
+        if date_ts >= start_day:
+            print(date_ts, start_day)
+            print('loading date: %s'% date)
             day_data = json.load(open(date))['all_data']
             for spot in range(len(day_data)):
                 spot_day_data = day_data[spot]['data']
@@ -216,7 +220,6 @@ def load_data(search_path='data/challenge_*day*.json', start_date=comp_start_tim
                     bad_spots.append((date, spot, spot_day_data))
                 else:
                     wave_df = wave_df.append(this_wave_df)
-
     track_df = track_df.drop_duplicates()
     track_df['real_sample'] =  1 
     track_df['sample_num'] = 1
@@ -227,9 +230,9 @@ def load_data(search_path='data/challenge_*day*.json', start_date=comp_start_tim
     track_df['scaled_sample_num'] = track_df['sample_num'] / track_df['sample_num'].max() 
     track_df['ts'] = track_df['timestamp']
     track_df['ts_utc'] = pd.to_datetime(track_df['ts'])
-    track_df['ts_east'] = track_df['ts_utc']
-    track_df.index = track_df['ts_east']
-    track_df = track_df.tz_convert("US/Eastern")
+    track_df.index = track_df['ts_utc']
+    #track_df['ts_east'] = track_df['ts_utc']
+    #track_df = track_df.tz_convert("US/Eastern")
 
     # sometimes there are multiple entries for same ts
     wave_df = wave_df.drop_duplicates()
@@ -237,9 +240,14 @@ def load_data(search_path='data/challenge_*day*.json', start_date=comp_start_tim
     wave_df['real_sample'] =  1 
     wave_df['ts'] = wave_df['timestamp']
     wave_df['ts_utc'] = pd.to_datetime(wave_df['ts'])
-    wave_df['ts_east'] = wave_df['ts_utc']
-    wave_df.index = wave_df['ts_east']
-    wave_df = wave_df.tz_convert("US/Eastern")
+    wave_df.index = wave_df['ts_utc']
+    #wave_df['ts_east'] = wave_df['ts_utc']
+    #wave_df = wave_df.tz_convert("US/Eastern")
+    track_df = track_df[track_df['ts_utc'] > start_date]
+    wave_df = wave_df[wave_df['ts_utc'] > start_date]
+
+    track_df = track_df[track_df['ts_utc'] < end_date]
+    wave_df = wave_df[wave_df['ts_utc'] < end_date]
     return track_df, wave_df
 
 def plot_spot_tracks(track_df, savedir='spot_plots'):
