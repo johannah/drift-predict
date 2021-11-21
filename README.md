@@ -12,4 +12,4 @@ TODO explain data downloads / setup
 
 ` python example.py `
 
-![Example Prediction](https://github.com/johannah/drift-predict/blob/main/media/example_drift.gif) 
+![Example Prediction](https://github.com/johannah/drift-predict/blob/jrh_argo/media/example_drift.gif) 
