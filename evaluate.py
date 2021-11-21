@@ -64,6 +64,7 @@ def evaluate_spot(spot_df, pred_nc):
         pred_nearest = np.argmin(abs(all_pred_times-eval_time))
         pred_diff = all_pred_times[pred_nearest] - eval_time
 
+
         drift_nearest = spot_df.iloc[spot_df.index.get_loc(eval_time, method='nearest')]
         nearest_ts = drift_nearest['ts_utc']
         drift_diff = nearest_ts - eval_time
@@ -119,6 +120,5 @@ if __name__ == '__main__':
 
         print(np.sum(running_sum))
         pickle.dump(spot_distances, open(os.path.join(args.load_dir, 'result_distances.pkl'), 'wb'))
-        embed()
 
 
