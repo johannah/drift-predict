@@ -5,9 +5,6 @@ import seaborn as sns
 import json
 import os
 from glob import glob
-from utils import load_data
-from utils import plot_spot_tracks
-from download_fft_data import download_data
 import datetime
 import plotly.express as px
 from copy import deepcopy
@@ -31,7 +28,7 @@ from opendrift.readers.reader_ROMS_native import Reader as ROMSReader
 from opendrift.models.openberg import OpenBerg
 from opendrift.models.oceandrift import OceanDrift
 from opendrift.models.physics_methods import wind_drift_factor_from_trajectory, distance_between_trajectories
-from utils import DATA_DIR, get_weather, download_predictions
+from utils import DATA_DIR , load_drifter_data, download_predictions, load_environment, make_datetimes_from_args
 # 'https://tds.hycom.org/thredds/dodsC/GLBy0.08/latest'
 # //nomads.ncep.noaa.gov/pub/data/nccf/com/rtofs/prod/rtofs.20211120/rtofs
 #from mpl_toolkits.basemap import Basemap
@@ -57,7 +54,6 @@ def wind_drift_spot(spot, ot):
     return wind_drift_factor
     
 if __name__ == '__main__':
-    from example import load_environment
     seed = 1110
     test_spots = -1
     future_days = 3
@@ -68,13 +64,13 @@ if __name__ == '__main__':
     start_time =  datetime.datetime(2021, 11, 17, 17, 0, 0, 0, pytz.UTC)
     end_time =  start_time + datetime.timedelta(days=future_days)
     start_str = start_time.strftime("%Y%m%d-%H%M")
-    track_df, wave_df = load_data(search_path='data/challenge*day*JSON.json', start_date=start_time, end_date=end_time)
+    track_df, wave_df = load_drifter_data(search_path='data/challenge*day*JSON.json', start_date=start_time, end_date=end_time)
     spot_names = sorted(track_df['spotterId'].unique())
     # sample a number for testing
     if test_spots > 0:
         spot_names = np.random.choice(spot_names, test_spots)
     print(spot_names)
-    readers = load_environment(start_time, download=False, use_gfs=True, use_ncep=False, use_ww3=True, use_pred=True)
+    readers = load_environment(start_time, download=False, use_gfs=True, use_ncep=False, use_ww3=True, use_rtofs=True)
 
     ot = OceanDrift(loglevel=1000)
     [ot.add_reader(r) for r in readers]
