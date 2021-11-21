@@ -8,8 +8,8 @@ Data is expected to be in a directory called "data"
 
 TODO explain data downloads / setup
 
-## To run predictions
+## To run predictions with rtofs datasets
 
-` python example.py `
+` python simulate.py -r --download `
 
 ![Example Prediction](https://github.com/johannah/drift-predict/blob/jrh_argo/media/example_drift.gif) 
