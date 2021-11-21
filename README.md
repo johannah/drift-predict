@@ -5,7 +5,7 @@
 
 ## Setup
 
-- clone and install [Opendrift](https://github.com/OpenDrift/opendrift.git)
+- clone and install our [Opendrift](https://github.com/johannah/opendrift-predict.git)
 - set DATA_DIR in utils.py 
 
 ## Download data
