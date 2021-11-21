@@ -17,6 +17,7 @@ from opendrift.readers.reader_netCDF_CF_generic import Reader as GenericReader
 from opendrift.readers.reader_netCDF_CF_unstructured import Reader as UnstructuredReader
 from opendrift.readers.reader_grib2 import Reader as Grib2Reader
 from opendrift.readers.reader_ROMS_native import Reader as ROMSReader
+from download_fft_data import download_data
 
 DATA_DIR = '/Volumes/seahorse/2021-drifters/'
 comp_start_time = datetime.datetime(2021, 11, 1, 17, 0, 0, 0, pytz.UTC)
