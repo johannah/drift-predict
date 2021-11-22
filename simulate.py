@@ -69,7 +69,7 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
     drift_ts_index = np.argmin(diff_time)
     drift_ts = spot_df.index[drift_ts_index]
     if np.abs(start_time-drift_ts) > datetime.timedelta(hours=1):
-        print("NO NEAR TIME DRIFTER", drift_ts)
+        print("NO NEAR TIME DRIFTER", drift_ts, spot_df.loc[drift_ts]['spotterId'])
         return
     if end_datetime < start_datetime: 
         print('ending before starting')
