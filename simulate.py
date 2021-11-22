@@ -32,7 +32,7 @@ from opendrift.models.physics_methods import wind_drift_factor_from_trajectory, 
 from utils import DATA_DIR, download_predictions, load_environment, make_datetimes_from_args
 from utils import load_drifter_data, plot_spot_tracks
 
-def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter=False, end_at_drifter=False, plot_plot=False, plot_gif=False, num_seeds=100, seed_radius=10, wind_drift_factor_max=.04):
+def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter=False, end_at_drifter=False, plot_plot=False, plot_gif=False, num_seeds=100, seed_radius=10, wind_drift_factor_max=.04, model_type='OceanDrift'):
     # create random wind drift factors
     # mean wind drift factor is found to be 0.041
     # min wind drift factor is found to be 0.014
@@ -44,16 +44,16 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
     timestamps = [x for x in spot_df[ts_col].dt.tz_localize(None)]
     drifter_lons = np.array(spot_df['longitude'])
     drifter_lats = np.array(spot_df['latitude'])
-    ot = OceanDrift(loglevel=10)
+    if model_type == 'OceanDrift':
+        ot = OceanDrift(loglevel=80) # lower log is more verbose
     [ot.add_reader(r) for r in readers]
     # Prevent mixing elements downwards
     ot.set_config('drift:vertical_mixing', False)
-    # TODO fine-tune these
+    # TODO fine-tune these. 0.01 seemed too small
     ot.set_config('drift:horizontal_diffusivity', .05)  # m2/s
     ot.set_config('drift:current_uncertainty', .05)  # m2/s
     ot.set_config('drift:wind_uncertainty', .05)  # m2/s
-    start_lon = drifter_lons[0]
-    start_lat = drifter_lats[0]
+    # find nearest timestep to start
     if start_at_drifter:
         start_datetime = timestamps[0]
     else:
@@ -64,9 +64,15 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
     else:
         end_datetime = end_datetime.replace(tzinfo=None)
 
+    # seed from time nearest to start time's location of drifters
+    drift_ts_index = np.argmin(abs(start_time-track_df.index))
+    drift_ts = track_df.index[drift_ts_index]
+    start_lon = track_df.loc[drift_ts]['longitude']
+    start_lat = track_df.loc[drift_ts]['latitude']
+
     ot.seed_elements(start_lon, start_lat, radius=seed_radius, number=num_seeds,
-                time=start_datetime,
-                wind_drift_factor=wind_drift_factor)
+                               time=drift_ts.replace(tzinfo=None),
+                               wind_drift_factor=wind_drift_factor)
 
     # time step should be in seconds
     ot.run(end_time=end_datetime, time_step=datetime.timedelta(hours=1), 
@@ -93,7 +99,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', default=1110)
-    parser.add_argument('--load', default='')
+    parser.add_argument('--load-dir', default='', help='load partially-complete experiment from this dir')
     parser.add_argument('--num-seeds', default=100, type=int, help='num particles to simulate')
     parser.add_argument('--seed-radius', default=500, type=int, help='meters squared region to seed particles in simulation')
     parser.add_argument('--wind-drift-factor-max', '-wdm', default=0.04, type=float, help='max wind drift factor to use when seeding particles. default was found experimentally with get_wind_drift_factor.py')
@@ -108,10 +114,10 @@ if __name__ == '__main__':
     parser.add_argument('--end-at-drifter', '-ed', action='store_true', default=False, help='end simulation at drifter start')
     parser.add_argument('--plot', action='store_true', default=False, help='write plot')
     parser.add_argument('--gif', action='store_true', default=False, help='write gif')
-    parser.add_argument('--use-ncep', '-n', action='store_true', default=False, help='include ncep data - wind data')
-    parser.add_argument('--use-ww3', '-w', action='store_true', default=False, help='include ww3 - 8 day wave forecast')
-    parser.add_argument('--use-gfs', '-g', action='store_true', default=False, help='include gfs - 14 day wind forecast')
-    parser.add_argument('--use-rtofs', '-r', action='store_true', default=False, help='include rtofs currents (auto download 7 day forecasts)')
+    parser.add_argument('--use-ncep', '-n', action='store_true', default=False, help='include ncep data - wind data. download manually to DATA_DIR/ncep/')
+    parser.add_argument('--use-ww3', '-w', action='store_true', default=False, help='include ww3 - 8 day wave forecast. download manually to DATA_DIR/ww3/')
+    parser.add_argument('--use-gfs', '-g', action='store_true', default=False, help='include gfs - 14 day wind forecast. download manually to DATA_DIR/gfs/')
+    parser.add_argument('--use-rtofs', '-r', action='store_true', default=False, help='include rtofs currents (auto download 7 day forecasts to download manually to DATA_DIR/pred/)')
     args = parser.parse_args()
     now = datetime.datetime.now(pytz.UTC)
     # ALL TIMES IN UTC
@@ -141,7 +147,8 @@ if __name__ == '__main__':
     # TODO find wind drift factor
     # TODO measure error
 
-    track_df, wave_df = load_drifter_data(search_path='data/challenge*day*JSON.json', start_date=start_time, end_date=end_time)
+    #track_df, wave_df = load_drifter_data(search_path='data/challenge*day*JSON.json', start_date=start_time, end_date=end_time)
+    track_df, wave_df = load_drifter_data(search_path='data/challenge*day*JSON.json')
     spot_names = sorted(track_df['spotterId'].unique())
     # sample a number for testing
     if args.test_spots > 0:

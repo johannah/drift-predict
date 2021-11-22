@@ -6,6 +6,7 @@
 ## Setup
 
 - clone and install our [Opendrift](https://github.com/johannah/opendrift-predict.git)
+- install cdo (`brew install cdo` on osx)
 - set DATA_DIR in utils.py 
 
 ## Download data

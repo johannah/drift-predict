@@ -60,14 +60,14 @@ def load_environment(start_time=comp_start_time, download=True, use_gfs=True, us
     if use_ncep:
         # I think ncep is p5 degree (56km)
         # start: 2021-10-27 06:00:00   end: 2021-11-28 00:00:00   step: 3:00:00
-        ncep_wind_data = GenericReader('/Volumes/seahorse/2021-drifters/ncep/Global_Best_v3.nc', standard_name_mapping=remap_ncep)
+        ncep_wind_data = GenericReader(os.path.join(DATA_DIR, 'ncep', 'Global_Best_v3.nc'), standard_name_mapping=remap_ncep)
         readers.append(ncep_wind_data)
     if use_ww3:
         # https://thredds.ucar.edu/thredds/ncss/grib/NCEP/WW3/Global/Best/dataset.html
-        ww3_wave_data1 = GenericReader('/Volumes/seahorse/2021-drifters/ww3/Global_Best_1101_1111.nc', standard_name_mapping=remap_ww3)
+        ww3_wave_data1 = GenericReader(os.path.join(DATA_DIR, 'ww3', 'Global_Best_1101_1111.nc'), standard_name_mapping=remap_ww3)
         # ww3 is only 7 days in advance
         # 2021-11-10 03:00:00   end: 2021-11-28 00:00:00   step: 3:00:00
-        ww3_wave_data2 = GenericReader('/Volumes/seahorse/2021-drifters/ww3/Global_Best_1110_1203.nc', standard_name_mapping=remap_ww3)
+        ww3_wave_data2 = GenericReader(os.path.join(DATA_DIR, 'ww3', 'Global_Best_1110_1203.nc'), standard_name_mapping=remap_ww3)
         readers.append(ww3_wave_data1)
         readers.append(ww3_wave_data2)
     if use_rtofs:
@@ -99,7 +99,7 @@ def load_environment(start_time=comp_start_time, download=True, use_gfs=True, us
         # start: 2021-10-21 00:00:00   end: 2021-12-06 12:00:00   step: 3:00:00
         # gfs should go last in case ww3 is used
  
-        gfsp5_wind_data = GenericReader('/Volumes/seahorse/2021-drifters/gfs/Global_0p5deg_Best.nc', standard_name_mapping=remap_gfs)
+        gfsp5_wind_data = GenericReader(os.path.join(DATA_DIR, 'gfs', 'Global_0p5deg_Best.nc'), standard_name_mapping=remap_gfs)
         readers.append(gfsp5_wind_data)
     return readers
 
