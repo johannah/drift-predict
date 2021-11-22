@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use("Agg")
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -44,11 +46,10 @@ from utils import plot_spot_tracks
 # https://polar.ncep.noaa.gov/global/examples/usingpython.shtml
 
 def evaluate_spot(spot_df, pred_nc):
+    spot = np.array(spot_df['spotterId'])[0]
     # create random wind drift factors
     samples = spot_df.index
     timestamps = spot_df['ts_utc'] 
-    drifter_lons = np.array(spot_df['longitude'])
-    drifter_lats = np.array(spot_df['latitude'])
     # Calculate distances (meters) between simulation and synthetic drifter at each time step
     all_pred_times = np.array(pd.to_datetime(pred_nc['time'][:], utc=True, unit='s'))
     pred_times = []
@@ -58,35 +59,80 @@ def evaluate_spot(spot_df, pred_nc):
     drifter_lons = []
     drifter_lats = []
     drifter_times = []
+    gt_drifter_lons = []
+    gt_drifter_lats = []
+    gt_drifter_times = []
+
 
     eval_time = comp_eval_time
     while eval_time < comp_end_time:
         pred_nearest = np.argmin(abs(all_pred_times-eval_time))
         pred_diff = all_pred_times[pred_nearest] - eval_time
 
-
-        drift_nearest = spot_df.iloc[spot_df.index.get_loc(eval_time, method='nearest')]
+        drift_nearest_idx = spot_df.index.get_loc(eval_time, method='nearest')
+        drift_nearest = spot_df.iloc[drift_nearest_idx]
         nearest_ts = drift_nearest['ts_utc']
         drift_diff = nearest_ts - eval_time
 
         if (abs(pred_diff) < datetime.timedelta(hours=1)) and (abs(drift_diff) < datetime.timedelta(hours=1)):
-            drifter_times.append(drift_nearest['ts_utc'])
-            drifter_lons.append(drift_nearest['longitude'])
-            drifter_lats.append(drift_nearest['latitude'])
+            gt_drifter_times.append(drift_nearest['ts_utc'])
+            gt_drifter_lons.append(drift_nearest['longitude'])
+            gt_drifter_lats.append(drift_nearest['latitude'])
 
+            # interpolate bt drifter points
+            # drifter sample is older than requested timestep
+            if drift_diff < datetime.timedelta(seconds=1):
+                prev_idx = drift_nearest_idx
+                next_idx = min([drift_nearest_idx+1, spot_df.shape[0]-1])
+            else:
+                prev_idx = max([drift_nearest_idx-1, 0])
+                next_idx = drift_nearest_idx
+
+            prev_pos = (spot_df.iloc[prev_idx]['latitude'], spot_df.iloc[prev_idx]['longitude'])
+            next_pos = (spot_df.iloc[next_idx]['latitude'], spot_df.iloc[next_idx]['longitude'])
+            diff_dis = haversine(prev_pos, next_pos, unit=Unit.KILOMETERS)
+            diff_rad = haversine(prev_pos, next_pos, unit=Unit.RADIANS)
+            diff_time_prev_next = spot_df.iloc[next_idx]['ts_utc']-spot_df.iloc[prev_idx]['ts_utc']
+            diff_time_prev_target = eval_time-spot_df.iloc[prev_idx]['ts_utc']
+            if diff_time_prev_next.seconds > 0:
+                diff_time = (diff_time_prev_target.seconds/diff_time_prev_next.seconds)
+                interp_dis = diff_time * diff_dis
+                if interp_dis > 10:
+                    print('interpolating', interp_dis)
+                interp_lat, interp_lon = inverse_haversine(prev_pos, diff_dis, diff_rad)
+                drifter_lats.append(interp_lat)
+                drifter_lons.append(interp_lon)
+                drifter_times.append(eval_time)
+            else:
+                print('no diff bt prev and next', prev_idx, next_idx, eval_time)
+                drifter_lats.append(spot_df.iloc[drift_nearest_idx]['latitude']) 
+                drifter_lons.append(spot_df.iloc[drift_nearest_idx]['longitude']) 
+                drifter_times.append(spot_df.iloc[drift_nearest_idx]['ts_utc'])
+ 
             pred_times.append(all_pred_times[pred_nearest])
             pred_lons.append(pred_nc['lon'][:][:,pred_nearest])
             pred_lats.append(pred_nc['lat'][:][:,pred_nearest])
 
-        eval_time = eval_time + datetime.timedelta(days=1) 
+        eval_time = eval_time + datetime.timedelta(hours=1) 
     pred_lons = np.array(pred_lons)
     pred_lats = np.array(pred_lats)
     drifter_lons = np.array(drifter_lons)
     drifter_lats = np.array(drifter_lats)
     distances = []
+    # plot all predictions
+    plt.figure()
     for s in range(pred_lons.shape[1]):
+        plt.scatter([pred_lons[0,s]], [pred_lats[0,s]], c='green', marker='o', s=2)
+        plt.scatter(pred_lons[:,s], pred_lats[:,s], c='gray', s=2)
         distances.append(distance_between_trajectories(pred_lons[:,s], pred_lats[:,s], drifter_lons, drifter_lats))
-
+    error = np.array(distances).sum(1)
+    best_seed = np.argmin(error)
+    print('best seed', best_seed, np.max(distances[best_seed]))
+    plt.title('best seed %s err %s'%(best_seed, np.max(distances[best_seed])))
+    plt.scatter([pred_lons[:,best_seed]], [pred_lats[:,best_seed]], c='c', marker='.', s=2)
+    plt.scatter(drifter_lons, drifter_lats, c='b', s=5)
+    plt.savefig(os.path.join(load_dir, spot+'_choose.png'))
+    plt.close()
     return np.array(distances)
 
 if __name__ == '__main__':
@@ -94,8 +140,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('load_dir')
     parser.add_argument('--seed', default=1110)
-    parser.add_argument('--plot', action='store_true', default=False, help='write plot')
-    parser.add_argument('--gif', action='store_true', default=False, help='write gif')
+    parser.add_argument('--eval-type', '-et', default='median', choices=['median'], help='how to choose the lat/lon prediction')
     args = parser.parse_args()
     np.random.seed(args.seed)
     load_dir = args.load_dir

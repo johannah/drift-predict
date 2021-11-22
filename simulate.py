@@ -32,12 +32,12 @@ from opendrift.models.physics_methods import wind_drift_factor_from_trajectory, 
 from utils import DATA_DIR, download_predictions, load_environment, make_datetimes_from_args
 from utils import load_drifter_data, plot_spot_tracks
 
-def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter=False, end_at_drifter=False, plot_plot=False, plot_gif=False, num_seeds=100, seed_radius=10, wind_drift_factor_max=.04, model_type='OceanDrift'):
+def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter=False, end_at_drifter=False, plot_plot=False, plot_gif=False, num_seeds=100, seed_radius=10, wind_drift_factor_max=.02, model_type='OceanDrift'):
     # create random wind drift factors
     # mean wind drift factor is found to be 0.041
     # min wind drift factor is found to be 0.014
     # max wind drift factor is found to be 0.16
-    wind_drift_factor = np.linspace(0.01, wind_drift_factor_max, num_seeds)
+    wind_drift_factor = np.linspace(0.001, wind_drift_factor_max, num_seeds)
     spot_df = track_df[track_df['spotterId'] == spot]
     samples = spot_df.index
     ts_col = 'ts_utc'
@@ -50,9 +50,9 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
     # Prevent mixing elements downwards
     ot.set_config('drift:vertical_mixing', False)
     # TODO fine-tune these. 0.01 seemed too small
-    ot.set_config('drift:horizontal_diffusivity', .05)  # m2/s
-    ot.set_config('drift:current_uncertainty', .05)  # m2/s
-    ot.set_config('drift:wind_uncertainty', .05)  # m2/s
+    ot.set_config('drift:horizontal_diffusivity', .1)  # m2/s
+    ot.set_config('drift:current_uncertainty', .1)  # m2/s
+    ot.set_config('drift:wind_uncertainty', .1)  # m2/s
     # find nearest timestep to start
     if start_at_drifter:
         start_datetime = timestamps[0]
@@ -65,36 +65,47 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
         end_datetime = end_datetime.replace(tzinfo=None)
 
     # seed from time nearest to start time's location of drifters
-    drift_ts_index = np.argmin(abs(start_time-track_df.index))
-    drift_ts = track_df.index[drift_ts_index]
-    start_lon = track_df.loc[drift_ts]['longitude']
-    start_lat = track_df.loc[drift_ts]['latitude']
+    diff_time = abs(start_time-spot_df.index)
+    drift_ts_index = np.argmin(diff_time)
+    drift_ts = spot_df.index[drift_ts_index]
+    if np.abs(start_time-drift_ts) > datetime.timedelta(hours=1):
+        print("NO NEAR TIME DRIFTER", drift_ts)
+        return
+    if end_datetime < start_datetime: 
+        print('ending before starting')
+        return
+    try:
+        start_lon = spot_df.loc[drift_ts]['longitude']
+        start_lat = spot_df.loc[drift_ts]['latitude']
+        ot.seed_elements(start_lon, start_lat, radius=seed_radius, number=num_seeds,
+                                   time=start_time.replace(tzinfo=None),
+                                   wind_drift_factor=wind_drift_factor)
 
-    ot.seed_elements(start_lon, start_lat, radius=seed_radius, number=num_seeds,
-                               time=drift_ts.replace(tzinfo=None),
-                               wind_drift_factor=wind_drift_factor)
-
-    # time step should be in seconds
-    ot.run(end_time=end_datetime, time_step=datetime.timedelta(hours=1), 
-           time_step_output=datetime.timedelta(hours=1), outfile=os.path.join(spot_dir, spot + '.nc'))
-    drifter_dict = {'time': timestamps, 'lon': drifter_lons, 'lat': drifter_lats, 
-            'label': 'CODE Drifter', 'color': 'b', 'linewidth': 2, 'linestyle':':', 'markersize': 40}
-    # Drifter track is shown in red, and simulated trajectories are shown in gray. 
-    motion_background = ['x_sea_water_velocity', 'y_sea_water_velocity']
-    ot.history.dump(os.path.join(spot_dir, spot+'.npy'))
+        # time step should be in seconds
+        ot.run(end_time=end_datetime.replace(tzinfo=None), time_step=datetime.timedelta(hours=1), 
+               time_step_output=datetime.timedelta(hours=1), outfile=os.path.join(spot_dir, spot + '.nc'))
+        drifter_dict = {'time': timestamps, 'lon': drifter_lons, 'lat': drifter_lats, 
+                'label': 'CODE Drifter', 'color': 'b', 'linewidth': 2, 'linestyle':':', 'markersize': 40}
+        # Drifter track is shown in red, and simulated trajectories are shown in gray. 
+        motion_background = ['x_sea_water_velocity', 'y_sea_water_velocity']
+        ot.history.dump(os.path.join(spot_dir, spot+'.npy'))
+    except Exception as e:
+        print(e)
+        embed()
     if plot_plot:
+        #try:
+        #    ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), background=motion_background, buffer=.01, fast=True, cmap='viridis',  trajectory_dict=drifter_dict)
+        #except:
         try:
-            ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), background=motion_background, buffer=.01, fast=True, cmap='viridis',  trajectory_dict=drifter_dict)
+            ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), buffer=.01, fast=True, cmap='viridis',  trajectory_dict=drifter_dict)
         except:
-            try:
-                ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), buffer=.01, fast=True, cmap='viridis',  trajectory_dict=drifter_dict)
-            except:
-                pass
+            pass
     if plot_gif:
         try:
             ot.animation(filename=os.path.join(spot_dir, '%s.gif'%spot), background=motion_background, buffer=.3, fast=True, drifter=drifter_dict, show_trajectories=True, surface_only=True)
         except:
             pass
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
@@ -102,7 +113,7 @@ if __name__ == '__main__':
     parser.add_argument('--load-dir', default='', help='load partially-complete experiment from this dir')
     parser.add_argument('--num-seeds', default=100, type=int, help='num particles to simulate')
     parser.add_argument('--seed-radius', default=500, type=int, help='meters squared region to seed particles in simulation')
-    parser.add_argument('--wind-drift-factor-max', '-wdm', default=0.04, type=float, help='max wind drift factor to use when seeding particles. default was found experimentally with get_wind_drift_factor.py')
+    parser.add_argument('--wind-drift-factor-max', '-wdm', default=0.06, type=float, help='max wind drift factor to use when seeding particles. default was found experimentally with get_wind_drift_factor.py')
     parser.add_argument('--start-year', default=2021, type=int)
     parser.add_argument('--start-month', default=11, type=int)
     parser.add_argument('--start-day', default=17, type=int)

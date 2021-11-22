@@ -36,7 +36,8 @@ def load_environment(start_time=comp_start_time, download=True, use_gfs=True, us
     # 'https://tds.hycom.org/thredds/dodsC/GLBy0.08/latest'
     # //nomads.ncep.noaa.gov/pub/data/nccf/com/rtofs/prod/rtofs.20211120/rtofs
     if download:
-        download_data()
+        # TODO darpa blocked me
+        #download_data()
         download_predictions(DATA_DIR)
     remap_gfs = {'u-component_of_wind_planetary_boundary':'x_wind', 
                  'v-component_of_wind_planetary_boundary':'y_wind'}
@@ -53,8 +54,6 @@ def load_environment(start_time=comp_start_time, download=True, use_gfs=True, us
                   'u-component_of_wind_surface':'x_wind', 
                   'v-component_of_wind_surface':'y_wind',
                   }
-    #
-
     readers = []
     # Several models to choose from
     if use_ncep:
