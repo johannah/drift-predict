@@ -29,7 +29,7 @@ def make_datetimes_from_args(args):
     end_time =  start_time + datetime.timedelta(days=args.future_days)
     start_str = start_time.strftime("%Y%m%d-%H%M")
     end_str = end_time.strftime("%Y%m%d-%H%M")
-    return start_time, start_str,  end_time, end_str
+    return start_time, start_str, end_time, end_str
  
 def load_environment(start_time=comp_start_time, download=True, use_gfs=True, use_ncep=False, use_ww3=True, use_rtofs=True):
     # https://polar.ncep.noaa.gov/global/examples/usingpython.shtml

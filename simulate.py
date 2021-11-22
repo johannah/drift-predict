@@ -34,7 +34,10 @@ from utils import load_drifter_data, plot_spot_tracks
 
 def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter=False, end_at_drifter=False, plot_plot=False, plot_gif=False, num_seeds=100, seed_radius=10, wind_drift_factor_max=.04):
     # create random wind drift factors
-    wind_drift_factor = np.random.uniform(0, wind_drift_factor_max, num_seeds)
+    # mean wind drift factor is found to be 0.041
+    # min wind drift factor is found to be 0.014
+    # max wind drift factor is found to be 0.16
+    wind_drift_factor = np.linspace(0.01, wind_drift_factor_max, num_seeds)
     spot_df = track_df[track_df['spotterId'] == spot]
     samples = spot_df.index
     ts_col = 'ts_utc'
@@ -46,9 +49,9 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
     # Prevent mixing elements downwards
     ot.set_config('drift:vertical_mixing', False)
     # TODO fine-tune these
-    ot.set_config('drift:horizontal_diffusivity', .01)  # m2/s
-    ot.set_config('drift:current_uncertainty', .01)  # m2/s
-    ot.set_config('drift:wind_uncertainty', .01)  # m2/s
+    ot.set_config('drift:horizontal_diffusivity', .05)  # m2/s
+    ot.set_config('drift:current_uncertainty', .05)  # m2/s
+    ot.set_config('drift:wind_uncertainty', .05)  # m2/s
     start_lon = drifter_lons[0]
     start_lat = drifter_lats[0]
     if start_at_drifter:
@@ -90,14 +93,15 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', default=1110)
+    parser.add_argument('--load', default='')
     parser.add_argument('--num-seeds', default=100, type=int, help='num particles to simulate')
-    parser.add_argument('--seed-radius', default=10, type=int, help='meters squared region to seed particles in simulation')
+    parser.add_argument('--seed-radius', default=500, type=int, help='meters squared region to seed particles in simulation')
     parser.add_argument('--wind-drift-factor-max', '-wdm', default=0.04, type=float, help='max wind drift factor to use when seeding particles. default was found experimentally with get_wind_drift_factor.py')
     parser.add_argument('--start-year', default=2021, type=int)
     parser.add_argument('--start-month', default=11, type=int)
     parser.add_argument('--start-day', default=17, type=int)
     parser.add_argument('--start-hour', default=17, type=int)
-    parser.add_argument('--future_days', '-fd', default=13, type=int)
+    parser.add_argument('--future-days', '-fd', default=16, type=int)
     parser.add_argument('--test-spots', default=-1, help='number of random spots to run. if negative, all spots will be evaluated')
     parser.add_argument('--download', action='store_true', default=False, help='download new data')
     parser.add_argument('--start-at-drifter', '-sd', action='store_true', default=False, help='start simulation at drifter start')
@@ -109,20 +113,28 @@ if __name__ == '__main__':
     parser.add_argument('--use-gfs', '-g', action='store_true', default=False, help='include gfs - 14 day wind forecast')
     parser.add_argument('--use-rtofs', '-r', action='store_true', default=False, help='include rtofs currents (auto download 7 day forecasts)')
     args = parser.parse_args()
-    np.random.seed(args.seed)
-    # ALL TIMES IN UTC
     now = datetime.datetime.now(pytz.UTC)
+    # ALL TIMES IN UTC
+
+    load_from_dir = ''
+    if args.load_dir != '':
+        load_from_dir = args.load_dir
+        spot_dir = args.load_dir
+        # reload w same args
+        args = pickle.load( open(os.path.join(spot_dir, 'args.pkl'), 'rb'))
+    np.random.seed(args.seed)
     now_str = now.strftime("%Y%m%d-%H%M")
     start_time, start_str, end_time, end_str = make_datetimes_from_args(args)
-    spot_dir = os.path.join(DATA_DIR, 'results', 'spots_N%s_S%s_E%s_DS%s_DE%s_R%sG%sW%sN%s_WD%.02f'%(now_str, 
+    if load_from_dir ==  '':
+        spot_dir = os.path.join(DATA_DIR, 'results', 'spots_N%s_S%s_E%s_DS%s_DE%s_R%sG%sW%sN%s_WD%.02f'%(now_str, 
                                      start_str, end_str, int(args.start_at_drifter), int(args.end_at_drifter), 
                                      int(args.use_rtofs), int(args.use_gfs), int(args.use_ww3), int(args.use_ncep), args.wind_drift_factor_max))
-    if not os.path.exists(spot_dir):
-        os.makedirs(spot_dir)
-        os.makedirs(os.path.join(spot_dir, 'python'))
-        cmd = 'cp *.py %s/' %os.path.join(spot_dir, 'python')
-        os.system(cmd)
-        pickle.dump(args, open(os.path.join(spot_dir, 'args.pkl'), 'wb'))
+        if not os.path.exists(spot_dir):
+            os.makedirs(spot_dir)
+            os.makedirs(os.path.join(spot_dir, 'python'))
+            cmd = 'cp *.py %s/' %os.path.join(spot_dir, 'python')
+            os.system(cmd)
+            pickle.dump(args, open(os.path.join(spot_dir, 'args.pkl'), 'wb'))
 
 
     # how far do drifters go in 10 days?
@@ -137,8 +149,9 @@ if __name__ == '__main__':
     print(spot_names)
     readers = load_environment(start_time, download=args.download, use_gfs=args.use_gfs, use_ncep=args.use_ncep, use_ww3=args.use_ww3, use_rtofs=args.use_rtofs)
     for spot in spot_names:
-        simulate_spot(spot, start_datetime=start_time,  end_datetime=end_time,\
-                      start_at_drifter=args.start_at_drifter,  end_at_drifter=args.end_at_drifter, \
-                      plot_plot=args.plot, plot_gif=args.gif, num_seeds=args.num_seeds, seed_radius=args.seed_radius, wind_drift_factor_max=args.wind_drift_factor_max)
+        if not os.path.exists(os.path.join(spot_dir, spot + '.nc')):
+            simulate_spot(spot, start_datetime=start_time,  end_datetime=end_time,\
+                          start_at_drifter=args.start_at_drifter,  end_at_drifter=args.end_at_drifter, \
+                          plot_plot=args.plot, plot_gif=args.gif, num_seeds=args.num_seeds, seed_radius=args.seed_radius, wind_drift_factor_max=args.wind_drift_factor_max)
 
 
