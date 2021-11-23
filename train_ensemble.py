@@ -52,6 +52,119 @@ def make_dataset(spot_names, model_names, model_dicts):
         spot_data = []
         for model in model_names:
             data = model_dicts[model][spot]
+
+def make_submission_file(load_dir, data_start_time, data_seed_time, data_eval_times):
+    model_name = os.path.split(load_dir)[1]
+    names = []
+    model_dict = {}
+    model_dict['start_time'] = data_start_time
+    model_dict['seed_time'] = data_seed_time
+    model_dict['eval_time'] = data_eval_times
+
+    pred_results = glob(os.path.join(load_dir, 'SPOT*.nc'))
+    #assert len(pred_results) == 88
+    load_args = pickle.load(open(os.path.join(load_dir, 'args.pkl'), 'rb'))
+    model_dict['load_args'] = load_args
+    args_start_time, args_start_str, args_end_time, args_end_str = make_datetimes_from_args(load_args)
+    all_lats = []
+    all_lons = []
+    all_times = []
+    names = []
+    for pr in pred_results:
+        pred_nc = nc.Dataset(pr)
+        spot = os.path.split(pr)[1].replace('.nc', '')
+        if spot in ['SPOT-010057', 'SPOT-1166']:
+            continue
+
+        pred_time_raw = pred_nc['time'][:].data
+        pred_time = np.array([t.replace(tzinfo=None) for t in (pd.to_datetime(pred_nc['time'][:], utc=True, unit='s'))])
+
+        use_idx = np.random.randint(0, pred_nc['lat'][:].data.shape[0])
+        pred_lats = pred_nc['lat'][use_idx].data
+        pred_lons = pred_nc['lon'][use_idx].data
+        pred_x_wind = pred_nc['x_wind'][use_idx].data
+        pred_y_wind = pred_nc['y_wind'][use_idx].data
+        pred_x_sea_water_velocity = pred_nc['x_sea_water_velocity'][use_idx].data
+        pred_y_sea_water_velocity = pred_nc['y_sea_water_velocity'][use_idx].data
+        eval_lats = []
+        eval_lons = []
+        eval_times = []
+
+
+        for eval_time in data_eval_times:
+            pred_nearest_idx = np.argmin(abs(pred_time-eval_time))
+            pred_nearest_ts = pred_time[pred_nearest_idx]
+            pred_diff = pred_nearest_ts - eval_time
+
+            if (abs(pred_diff) > datetime.timedelta(hours=3)):
+                print('long time', abs(pred_diff), eval_time)
+                embed()
+            # sample is older than requested timestep
+            if pred_diff <= datetime.timedelta(seconds=1):
+                prev_idx = pred_nearest_idx
+                next_idx = min([pred_nearest_idx+1, pred_time.shape[0]-1])
+            else:
+                prev_idx = max([pred_nearest_idx-1, 0])
+                next_idx = pred_nearest_idx
+
+            prev_pos = (pred_lats[prev_idx], pred_lons[prev_idx])
+            next_pos = (pred_lats[next_idx], pred_lons[next_idx])
+            diff_dis = haversine(prev_pos, next_pos, unit=Unit.KILOMETERS)
+            diff_rad = haversine(prev_pos, next_pos, unit=Unit.RADIANS)
+            diff_time_prev_next = pred_time[next_idx]-pred_time[prev_idx]
+            diff_time_prev_target = eval_time-pred_time[prev_idx]
+            if diff_time_prev_next.seconds < (60*10):
+                target_lat = pred_lats[pred_nearest_idx]
+                target_lon = pred_lons[pred_nearest_idx]
+            else:
+                if diff_time_prev_next.seconds > 0:
+                    diff_time = (diff_time_prev_target.seconds/diff_time_prev_next.seconds)
+                    interp_dis = diff_time * diff_dis
+                    if interp_dis > 10:
+                        print('interpolating', interp_dis)
+                        embed()
+                    target_lat, target_lon = inverse_haversine(prev_pos, diff_dis, diff_rad)
+                else:
+                    target_lat = pred_lats[pred_nearest_idx]
+                    target_lon = pred_lons[pred_nearest_idx]
+            eval_times.append(pred_nearest_ts)
+            eval_lats.append(target_lat)
+            eval_lons.append(target_lon)
+        names.append(spot)
+        all_times.append(eval_times)
+        all_lats.append(eval_lats)
+        all_lons.append(eval_lons)
+ 
+    all_lats = np.round(np.array(all_lats), 4)
+    all_lons = np.round(np.array(all_lons), 4)
+    rdict = {}
+    example = pd.read_csv('example.csv')
+    rdict['spotterId'] = example['spotterId']
+    missing = []
+    for xx, eval_date in enumerate(data_eval_times):
+        if eval_date.month == 11:
+            month = 'Nov'
+        if eval_date.month == 12:
+            month = 'Dec'
+        lat_name = month + str(eval_date.day) + 'lat'
+        lon_name = month + str(eval_date.day) + 'lon'
+        rdict[lat_name] = []
+        rdict[lon_name] = []
+        for ss in example['spotterId']:
+            if ss in names:
+                snum = names.index(ss)
+                rdict[lat_name].append(all_lats[snum,xx])
+                rdict[lon_name].append(all_lons[snum,xx])
+            else:
+                missing.append(ss)
+                rdict[lat_name].append(0.0)
+                rdict[lon_name].append(0.0)
+    missing = set(missing)
+    print('MISSING', missing)
+    df = pd.DataFrame(rdict)
+    df.to_csv(os.path.join(load_dir,'_mrl_submission_180'+ os.path.split(load_dir)[1]+'.csv'), header=True, index=False)
+    return df
+
 def make_summary_file(load_dir, data_start_time, data_seed_time, data_eval_times):
     model_name = os.path.split(load_dir)[1]
     model_dict = {}
@@ -131,7 +244,7 @@ def make_summary_file(load_dir, data_start_time, data_seed_time, data_eval_times
                     embed()
                 # interpolate bt drifter points
                 # drifter sample is older than requested timestep
-                if drift_diff <= datetime.timedelta(seconds=1):
+                if drift_diff <= datetime.timedelta(minutes=1):
                     prev_idx = drift_nearest_idx
                     next_idx = min([drift_nearest_idx+1, drift_time.shape[0]-1])
                 else:
@@ -170,88 +283,13 @@ def make_summary_file(load_dir, data_start_time, data_seed_time, data_eval_times
             print(priming.shape)
 
     pickle.dump(model_dict, open(os.path.join(load_dir, 'summary.pkl'), 'wb'))
-#        #pred_idxs = []
-#        #drifter_lons = []
-#        #drifter_lats = []
-#        #drifter_times = []
-#        #gt_drifter_lons = []
-#        #gt_drifter_lats = []
-#        #gt_drifter_times = []
-#
-#
-#    eval_time = comp_eval_time
-#    while eval_time < comp_end_time:
-#        pred_nearest = np.argmin(abs(all_pred_times-eval_time))
-#        pred_diff = all_pred_times[pred_nearest] - eval_time
-#
-#        drift_nearest_idx = spot_df.index.get_loc(eval_time, method='nearest')
-#        drift_nearest = spot_df.iloc[drift_nearest_idx]
-#        nearest_ts = drift_nearest['ts_utc']
-#        drift_diff = nearest_ts - eval_time
-#
-#        if (abs(pred_diff) < datetime.timedelta(hours=1)) and (abs(drift_diff) < datetime.timedelta(hours=1)):
-#            gt_drifter_times.append(drift_nearest['ts_utc'])
-#            gt_drifter_lons.append(drift_nearest['longitude'])
-#            gt_drifter_lats.append(drift_nearest['latitude'])
-#            pred_idxs.append(pred_nearest)
-#
-#            # interpolate bt drifter points
-#            # drifter sample is older than requested timestep
-#            if drift_diff < datetime.timedelta(seconds=1):
-#                prev_idx = drift_nearest_idx
-#                next_idx = min([drift_nearest_idx+1, spot_df.shape[0]-1])
-#            else:
-#                prev_idx = max([drift_nearest_idx-1, 0])
-#                next_idx = drift_nearest_idx
-#
-#            prev_pos = (spot_df.iloc[prev_idx]['latitude'], spot_df.iloc[prev_idx]['longitude'])
-#            next_pos = (spot_df.iloc[next_idx]['latitude'], spot_df.iloc[next_idx]['longitude'])
-#            diff_dis = haversine(prev_pos, next_pos, unit=Unit.KILOMETERS)
-#            diff_rad = haversine(prev_pos, next_pos, unit=Unit.RADIANS)
-#            diff_time_prev_next = spot_df.iloc[next_idx]['ts_utc']-spot_df.iloc[prev_idx]['ts_utc']
-#            diff_time_prev_target = eval_time-spot_df.iloc[prev_idx]['ts_utc']
-#            if diff_time_prev_next.seconds > 0:
-#                diff_time = (diff_time_prev_target.seconds/diff_time_prev_next.seconds)
-#                interp_dis = diff_time * diff_dis
-#                if interp_dis > 10:
-#                    print('interpolating', interp_dis)
-#                interp_lat, interp_lon = inverse_haversine(prev_pos, diff_dis, diff_rad)
-#                drifter_lats.append(interp_lat)
-#                drifter_lons.append(interp_lon)
-#                drifter_times.append(eval_time)
-#            else:
-#                print('no diff bt prev and next', prev_idx, next_idx, eval_time)
-#                drifter_lats.append(spot_df.iloc[drift_nearest_idx]['latitude']) 
-#                drifter_lons.append(spot_df.iloc[drift_nearest_idx]['longitude']) 
-#                drifter_times.append(spot_df.iloc[drift_nearest_idx]['ts_utc'])
-# 
-#
-#        eval_time = eval_time + datetime.timedelta(hours=1) 
-#        #eval_time = eval_time + datetime.timedelta(days=1) 
-#    drifter_lons = np.array(drifter_lons)
-#    drifter_lats = np.array(drifter_lats)
-#    embed()
-#    # plot all predictions
-#    #plt.figure()
-#    #for s in range(pred_lons.shape[1]):
-#    #    plt.scatter([pred_lons[0,s]], [pred_lats[0,s]], c='green', marker='o', s=2)
-#    #    plt.scatter(pred_lons[:,s], pred_lats[:,s], c='gray', s=2)
-#    #    distances.append(distance_between_trajectories(pred_lons[:,s], pred_lats[:,s], drifter_lons, drifter_lats))
-#    #error = np.array(distances).sum(1)
-#    #best_seed = np.argmin(error)
-#    #print('best seed', best_seed, np.max(distances[best_seed]))
-#    #plt.title('best seed %s err %s'%(best_seed, np.max(distances[best_seed])))
-#    #plt.scatter([pred_lons[:,best_seed]], [pred_lats[:,best_seed]], c='c', marker='.', s=2)
-#    #plt.scatter(drifter_lons, drifter_lats, c='b', s=5)
-#    #plt.savefig(os.path.join(load_dir, spot+'_choose.png'))
-#    #plt.close()
-#    return np.array(distances)
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', default=1110)
     parser.add_argument('--eval-type', '-et', default='median', choices=['median'], help='how to choose the lat/lon prediction')
+    parser.add_argument('--train', action='store_true', default=False)
     args = parser.parse_args()
     np.random.seed(args.seed)
     #start_time = datetime.datetime(2021, 11, 17, 17, 0, tzinfo=pytz.UTC)
@@ -260,45 +298,74 @@ if __name__ == '__main__':
 
 
     # FOR TRAINING
-    start_time = datetime.datetime(2021, 11, 17, 17, 0, tzinfo=None)
-    seed_time = datetime.datetime(2021, 11, 19, 17, 0, tzinfo=None)
-    eval_times = [datetime.datetime(2021, 11, 20, 17, 0, tzinfo=None),
-                  datetime.datetime(2021, 11, 21, 17, 0, tzinfo=None),
-                  datetime.datetime(2021, 11, 22, 17, 0, tzinfo=None)]
 
-    load_data_from_dirs = [
-            '/Volumes/seahorse/2021-drifters/results/spots_N20211122-1945_S20211117-1700_E20211203-1700_DS0_DE1_R1G1W1N0_Leeway71',
-            '/Volumes/seahorse/2021-drifters/results/spots_N20211122-1947_S20211117-1700_E20211203-1700_DS0_DE1_R1G1W1N0_Leeway69', 
-            '/Volumes/seahorse/2021-drifters/results/spots_N20211122-1947_S20211117-1700_E20211203-1700_DS0_DE1_R1G1W1N0_Leeway72', 
-            '/Volumes/seahorse/2021-drifters/results/spots_N20211122-1947_S20211117-1700_E20211203-1700_DS0_DE1_R1G1W1N0_WD0.06_OceanDrift', ]
+    if args.train:
+        start_time = datetime.datetime(2021, 11, 17, 17, 0, tzinfo=None)
+        seed_time = datetime.datetime(2021, 11, 19, 17, 0, tzinfo=None)
+        eval_times = [datetime.datetime(2021, 11, 20, 17, 0, tzinfo=None),
+                      datetime.datetime(2021, 11, 21, 17, 0, tzinfo=None),
+                      datetime.datetime(2021, 11, 22, 17, 0, tzinfo=None)]
 
-
-    ## FOR EVALUATION - order of dirs is important
-    #start_time = datetime.datetime(2021, 11, 20, 17, 0, tzinfo=None)
-    #seed_time = datetime.datetime(2021, 11, 22, 17, 0, tzinfo=None)
-    #eval_times = [datetime.datetime(2021, 11, 24, 17, 0, tzinfo=None),
-    #              datetime.datetime(2021, 11, 26, 17, 0, tzinfo=None),
-    #              datetime.datetime(2021, 11, 28, 17, 0, tzinfo=None)
-    #              datetime.datetime(2021, 11, 30, 17, 0, tzinfo=None)
-    #              datetime.datetime(2021, 12, 2, 17, 0, tzinfo=None)
-    #              ]
-
-    #load_data_from_dirs = [
-    #        '/Volumes/seahorse/2021-drifters/results/spots_N20211122-1945_S20211117-1700_E20211203-1700_DS0_DE1_R1G1W1N0_Leeway71',
-    #        '/Volumes/seahorse/2021-drifters/results/spots_N20211122-1947_S20211117-1700_E20211203-1700_DS0_DE1_R1G1W1N0_Leeway69', 
-    #        '/Volumes/seahorse/2021-drifters/results/spots_N20211122-1947_S20211117-1700_E20211203-1700_DS0_DE1_R1G1W1N0_Leeway72', 
-    #        '/Volumes/seahorse/2021-drifters/results/spots_N20211122-1947_S20211117-1700_E20211203-1700_DS0_DE1_R1G1W1N0_WD0.06_OceanDrift', ]
+        load_data_from_dirs = [
+                '/Volumes/seahorse/2021-drifters/results/spots_N20211122-1945_S20211117-1700_E20211203-1700_DS0_DE1_R1G1W1N0_Leeway71',
+                '/Volumes/seahorse/2021-drifters/results/spots_N20211122-1947_S20211117-1700_E20211203-1700_DS0_DE1_R1G1W1N0_Leeway69', 
+                '/Volumes/seahorse/2021-drifters/results/spots_N20211122-1947_S20211117-1700_E20211203-1700_DS0_DE1_R1G1W1N0_Leeway72', 
+                '/Volumes/seahorse/2021-drifters/results/spots_N20211122-1947_S20211117-1700_E20211203-1700_DS0_DE1_R1G1W1N0_WD0.06_OceanDrift', ]
+    else:
 
 
+         ## FOR EVALUATION - order of dirs is important
+        start_time = datetime.datetime(2021, 11, 20, 17, 0, tzinfo=None)
+        seed_time = datetime.datetime(2021, 11, 22, 17, 0, tzinfo=None)
+        eval_times = [datetime.datetime(2021, 11, 24, 17, 0, tzinfo=None),
+                      datetime.datetime(2021, 11, 26, 17, 0, tzinfo=None),
+                      datetime.datetime(2021, 11, 28, 17, 0, tzinfo=None),
+                      datetime.datetime(2021, 11, 30, 17, 0, tzinfo=None),
+                      datetime.datetime(2021, 12, 2, 17, 0, tzinfo=None),
+                      ]
 
+        load_data_from_dirs = [
+                '/Volumes/seahorse/2021-drifters/results/spots_N20211123-0126_S20211122-1700_E20211203-1700_DS0_DE0_R1G1W1N0_Leeway71',
+                '/Volumes/seahorse/2021-drifters/results/spots_N20211123-0126_S20211122-1700_E20211203-1700_DS0_DE0_R1G1W1N0_Leeway69', 
+                '/Volumes/seahorse/2021-drifters/results/spots_N20211123-0126_S20211122-1700_E20211203-1700_DS0_DE0_R1G1W1N0_Leeway72',
+                '/Volumes/seahorse/2021-drifters/results/spots_N20211123-0126_S20211122-1700_E20211203-1700_DS0_DE0_R1G1W1N0_WD0.06_OceanDrift',]
+
+
+
+#    for d in load_data_from_dirs:
+#        summary_file = os.path.join(d, 'summary.pkl') 
+#        if not os.path.exists(summary_file):
+#            make_summary_file(d, start_time, seed_time, eval_times)
+
+    preds = []
     for d in load_data_from_dirs:
-        summary_file = os.path.join(d, 'summary.pkl') 
-        if not os.path.exists(summary_file):
-            make_summary_file(d, start_time, seed_time, eval_times)
+        df = make_submission_file(d, start_time, seed_time, eval_times)
+        preds.append(df)
+    
+    #track_df, wave_df = load_drifter_data(search_path='data/challenge*day*JSON.json')
+    track_df = pd.read_csv('track_df.csv')
+    lat_cols = ['Nov24lat', 'Nov26lat', 'Nov28lat', 'Nov30lat', 'Dec2lat']
+    lon_cols = ['Nov24lon', 'Nov26lon', 'Nov28lon', 'Nov30lon', 'Dec2lon']
+    for s in list(df['spotterId']):
+        try:
+            spot_df = track_df[track_df['spotterId'] == s]
+            s_lats = spot_df['latitude']
+            s_lons = spot_df['longitude']
+            plt.figure()
+            sidx = preds[0]['spotterId']==s
+            plt.scatter(s_lons, s_lats, label='drifter')
+            plt.scatter(preds[0].loc[sidx, lon_cols], preds[0].loc[sidx, lon_cols], label='Lee71')
+            plt.scatter(preds[1].loc[sidx, lon_cols], preds[1].loc[sidx, lat_cols], label='Lee69')
+            plt.scatter(preds[2].loc[sidx, lon_cols], preds[4].loc[sidx, lat_cols], label='Lee72')
+            plt.scatter(preds[3].loc[sidx, lon_cols], preds[4].loc[sidx, lat_cols], label='Ocean')
+            plt.legend()
+            plt.savefig('spots/%s-results.png'%s)
+        except Exception as e:
+            embed()
+
 
 #    print('found %s predictions'%len(pred_results))
 #    if len(pred_results):
 #        load_args = pickle.load(open(os.path.join(args.load_dir, 'args.pkl'), 'rb'))
 #        start_time, start_str, end_time, end_str = make_datetimes_from_args(load_args)
-#        track_df, wave_df = load_drifter_data(search_path='data/challenge*day*JSON.json', start_date=start_time)
 

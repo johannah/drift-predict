@@ -73,7 +73,7 @@ def load_environment(start_time=comp_start_time, download=True, use_gfs=True, us
     if use_rtofs:
         weather_files = get_rtofs_currents(start_time)
         fpattern = 'rtofs_glo_2ds_f'
-        last_file = weather_files[-1]
+        last_file = fpattern+str(192)
         for nn in weather_files:
             try:
                 # readers/basereader/variables.py:                    logger.warning('Assuming time step of 1 hour for ' + self.name)
@@ -82,10 +82,10 @@ def load_environment(start_time=comp_start_time, download=True, use_gfs=True, us
                 # predictions are every hour until 72 hours out
                 hours_delta = 1
                 # THIS DOESNT WORK FAKED DATA
-                if last_file == nn:
+                if last_file in nn:
                     hours_delta = 10*24 # JUST HOLD THIS LAST FILE FOR A WHILE
                     #r = GenericReader(nn, time_step=datetime.timedelta(hours=hours_delta))
-                    #embed()
+                    print('adding 10 days', nn)
                 elif basename.startswith(fpattern):
                     fcount = int(basename[len(fpattern):len(fpattern)+3])
                     if fcount >= 72:
@@ -114,7 +114,6 @@ def get_rtofs_currents(start_time=comp_start_time):
     avail_dates = glob(os.path.join(pred_dir, '2021*'))
     # for days older than today, use nowcast date 
     today = pytz.utc.localize(datetime.datetime.utcnow())
-    assert start_time <= today
     date = start_time
     weather_files = []
     today_str = "%s%s%s"%(today.year, today.month, today.day)

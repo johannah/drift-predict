@@ -45,11 +45,11 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
     drifter_lons = np.array(spot_df['longitude'])
     drifter_lats = np.array(spot_df['latitude'])
     if model_type == 'OceanDrift':
-        ot = OceanDrift(loglevel=10) # lower log is more verbose
+        ot = OceanDrift(loglevel=80) # lower log is more verbose
         # Prevent mixing elements downwards
         ot.set_config('drift:vertical_mixing', False)
     if model_type == 'Leeway':
-        ot = Leeway(loglevel=0)
+        ot = Leeway(loglevel=80)
     [ot.add_reader(r) for r in readers]
     # TODO fine-tune these. 0.01 seemed too small
     ot.set_config('drift:horizontal_diffusivity', .1)  # m2/s
@@ -99,11 +99,11 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
         # Drifter track is shown in red, and simulated trajectories are shown in gray. 
         motion_background = ['x_sea_water_velocity', 'y_sea_water_velocity']
         ot.history.dump(os.path.join(spot_dir, spot+'.npy'))
-        along_track = ot.get_variables_along_trajectory(variables=variables, lons=drifter_lons, lats=drifter_lats, times=timestamps)
-        pickle.dump(along_track, open(os.path.join(spot_dir, spot+'_drifter_thru_model.pkl'), 'wb'))
+        # save drift track
+        #along_track = ot.get_variables_along_trajectory(variables=variables, lons=drifter_lons, lats=drifter_lats, times=timestamps)
+        #pickle.dump(along_track, open(os.path.join(spot_dir, spot+'_drifter_thru_model.pkl'), 'wb'))
     except Exception as e:
         print(e)
-        embed()
     if plot_plot:
         #try:
         #    ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), background=motion_background, buffer=.01, fast=True, cmap='viridis',  trajectory_dict=drifter_dict)
@@ -111,7 +111,10 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
         try:
             ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), buffer=.01, fast=True, cmap='viridis',  trajectory_dict=drifter_dict)
         except:
-            pass
+            try:
+                ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), buffer=.01, fast=True, cmap='viridis')
+            except:
+                pass
     if plot_gif:
         try:
             ot.animation(filename=os.path.join(spot_dir, '%s.gif'%spot), background=motion_background, buffer=.3, fast=True, drifter=drifter_dict, show_trajectories=True, surface_only=True)
