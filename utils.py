@@ -31,7 +31,7 @@ def make_datetimes_from_args(args):
     end_str = end_time.strftime("%Y%m%d-%H%M")
     return start_time, start_str, end_time, end_str
  
-def load_environment(start_time=comp_start_time, download=True, use_gfs=True, use_ncep=False, use_ww3=True, use_rtofs=True):
+def load_environment(start_time=comp_start_time, download=True, use_gfs=True, use_ncss=False, use_ww3=True, use_rtofs=True):
     # https://polar.ncep.noaa.gov/global/examples/usingpython.shtml
     # 'https://tds.hycom.org/thredds/dodsC/GLBy0.08/latest'
     # //nomads.ncep.noaa.gov/pub/data/nccf/com/rtofs/prod/rtofs.20211120/rtofs
@@ -41,32 +41,33 @@ def load_environment(start_time=comp_start_time, download=True, use_gfs=True, us
         download_predictions(DATA_DIR)
     remap_gfs = {'u-component_of_wind_planetary_boundary':'x_wind', 
                  'v-component_of_wind_planetary_boundary':'y_wind'}
-    remap_ww3 = { 'Mean_period_of_wind_waves_surface':'sea_surSignificant_height_of_wind_waves_surface', 
+    remap_ww3 = { 
+                  'Mean_period_of_wind_waves_surface':'sea_surface_wave_mean_period_from_variance_spectral_density_second_frequency_moment', 
                   'Significant_height_of_wind_waves_surface':'sea_surface_wave_significant_height',
                   'u-component_of_wind_surface':'x_wind', 
                   'v-component_of_wind_surface':'y_wind',
                   }
-    remap_ncep = {
-                  'reftime1':'reftime', 
-                  'time1':'time', 
-                  'lat':'lat', 
-                  'lon':'lon', 
-                  'u-component_of_wind_surface':'x_wind', 
-                  'v-component_of_wind_surface':'y_wind',
+    remap_ncss = {
+                  'water_u':'x_sea_water_velocity',
+                  'water_v':'v_sea_water_velocity',
                   }
+ 
     readers = []
     # Several models to choose from
-    if use_ncep:
-        # I think ncep is p5 degree (56km)
-        # start: 2021-10-27 06:00:00   end: 2021-11-28 00:00:00   step: 3:00:00
-        ncep_wind_data = GenericReader(os.path.join(DATA_DIR, 'ncep', 'Global_Best_v3.nc'), standard_name_mapping=remap_ncep)
-        readers.append(ncep_wind_data)
+    if use_ncss:
+        # https://ncss.hycom.org/thredds/ncss/grid/GLBy0.08/expt_93.0/uv3z/dataset.html
+        currents_1 = GenericReader(os.path.join(DATA_DIR, 'ncss', 'expt_93_uv3z_1101_1115.nc4'), standard_name_mapping=remap_ncss)
+        currents_2 = GenericReader(os.path.join(DATA_DIR, 'ncss', 'expt_93_uv3z_1115_1203.nc4'), standard_name_mapping=remap_ncss)
+        readers.append(currents_1)
+        readers.append(currents_2)
     if use_ww3:
         # https://thredds.ucar.edu/thredds/ncss/grib/NCEP/WW3/Global/Best/dataset.html
         ww3_wave_data1 = GenericReader(os.path.join(DATA_DIR, 'ww3', 'Global_Best_1101_1111.nc'), standard_name_mapping=remap_ww3)
         # ww3 is only 7 days in advance
         # 2021-11-10 03:00:00   end: 2021-11-28 00:00:00   step: 3:00:00
-        ww3_wave_data2 = GenericReader(os.path.join(DATA_DIR, 'ww3', 'Global_Best_1110_1203.nc'), standard_name_mapping=remap_ww3)
+        #ww3_wave_data2 = GenericReader(os.path.join(DATA_DIR, 'ww3', 'Global_Best_1110_1203.nc'), standard_name_mapping=remap_ww3)
+        # updated1122:  start: 2021-11-10 00:00:00   end: 2021-11-29 18:00:00   step: 3:00:00
+        ww3_wave_data2 = GenericReader(os.path.join(DATA_DIR, 'ww3', 'Global_Best_1110_1203_updated1122.nc'), standard_name_mapping=remap_ww3)
         readers.append(ww3_wave_data1)
         readers.append(ww3_wave_data2)
     if use_rtofs:
@@ -80,8 +81,11 @@ def load_environment(start_time=comp_start_time, download=True, use_gfs=True, us
                 basename = os.path.split(nn)[1] 
                 # predictions are every hour until 72 hours out
                 hours_delta = 1
+                # THIS DOESNT WORK FAKED DATA
                 if last_file == nn:
                     hours_delta = 10*24 # JUST HOLD THIS LAST FILE FOR A WHILE
+                    #r = GenericReader(nn, time_step=datetime.timedelta(hours=hours_delta))
+                    #embed()
                 elif basename.startswith(fpattern):
                     fcount = int(basename[len(fpattern):len(fpattern)+3])
                     if fcount >= 72:
@@ -95,10 +99,12 @@ def load_environment(start_time=comp_start_time, download=True, use_gfs=True, us
     if use_gfs:
         # GFS 0.5 degree (56km)  (higher res than 1 deg)
         # https://thredds.ucar.edu/thredds/gfsp5 # 14 day
+
         # start: 2021-10-21 00:00:00   end: 2021-12-06 12:00:00   step: 3:00:00
         # gfs should go last in case ww3 is used
- 
         gfsp5_wind_data = GenericReader(os.path.join(DATA_DIR, 'gfs', 'Global_0p5deg_Best.nc'), standard_name_mapping=remap_gfs)
+        # updated_1122 start: 2021-10-31 00:00:00   end: 2021-12-03 06:00:00   step: 3:00:00
+        #gfsp5_wind_data = GenericReader(os.path.join(DATA_DIR, 'gfs', 'Global_0p5deg_Best_updated1122.nc'), standard_name_mapping=remap_gfs)
         readers.append(gfsp5_wind_data)
     return readers
 
@@ -244,6 +250,7 @@ root group (NETCDF4 data model, file format HDF5):
         os.system(wget_ls)
         ls_fpath = os.path.join(pred_dir, 'ls-l')
         # if day is ready, read it
+        # the ls-l path is not always on the website! maybe bc they are still updating?
         if os.path.exists(ls_fpath):
             ls = open(ls_fpath, 'r')
             get_files = []
@@ -264,6 +271,7 @@ root group (NETCDF4 data model, file format HDF5):
                         # remap colinear - should check this!
                         cmd = 'cdo remapnn,global_.08 %s %s'%(target_path, nn_path)
                         os.system(cmd)
+
 
 def load_drifter_data(search_path='data/challenge_*day*.json', start_date=comp_start_time, end_date=comp_end_time):
     # load sorted dates

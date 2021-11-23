@@ -23,7 +23,7 @@ for rf in result_files:
     spot_names = []
     n_spots = len(rr.items())
     print(n_spots, rf)
-    if n_spots < 50:
+    if n_spots < 30:
         print(n_spots, 'not enough spots', rf)
         break
     for key, item in rr.items():

@@ -45,11 +45,11 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
     drifter_lons = np.array(spot_df['longitude'])
     drifter_lats = np.array(spot_df['latitude'])
     if model_type == 'OceanDrift':
-        ot = OceanDrift(loglevel=80) # lower log is more verbose
+        ot = OceanDrift(loglevel=10) # lower log is more verbose
         # Prevent mixing elements downwards
         ot.set_config('drift:vertical_mixing', False)
     if model_type == 'Leeway':
-        ot = Leeway(loglevel=20)
+        ot = Leeway(loglevel=0)
     [ot.add_reader(r) for r in readers]
     # TODO fine-tune these. 0.01 seemed too small
     ot.set_config('drift:horizontal_diffusivity', .1)  # m2/s
@@ -84,18 +84,23 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
             ot.seed_elements(start_lon, start_lat, radius=seed_radius, number=num_seeds,
                                    time=start_time.replace(tzinfo=None),
                                    wind_drift_factor=wind_drift_factor)
+            variables = ['x_sea_water_velocity', 'y_sea_water_velocity', 'x_wind', 'y_wind', 'sea_surface_wave_significant_height', 'sea_surface_wave_mean_period_from_variance_spectral_density_second_frequency_moment']
         # time step should be in seconds
-        if model_type == 'Leeway':
+        elif model_type == 'Leeway':
             ot.seed_elements(start_lon, start_lat, radius=seed_radius, number=num_seeds,
                                    time=start_time.replace(tzinfo=None),
                                    object_type=object_type)
+            variables = ['x_sea_water_velocity', 'y_sea_water_velocity', 'x_wind', 'y_wind']
         ot.run(end_time=end_datetime.replace(tzinfo=None), time_step=datetime.timedelta(hours=1), 
                time_step_output=datetime.timedelta(hours=1), outfile=os.path.join(spot_dir, spot + '.nc'))
+
         drifter_dict = {'time': timestamps, 'lon': drifter_lons, 'lat': drifter_lats, 
                 'label': 'CODE Drifter', 'color': 'b', 'linewidth': 2, 'linestyle':':', 'markersize': 40}
         # Drifter track is shown in red, and simulated trajectories are shown in gray. 
         motion_background = ['x_sea_water_velocity', 'y_sea_water_velocity']
         ot.history.dump(os.path.join(spot_dir, spot+'.npy'))
+        along_track = ot.get_variables_along_trajectory(variables=variables, lons=drifter_lons, lats=drifter_lats, times=timestamps)
+        pickle.dump(along_track, open(os.path.join(spot_dir, spot+'_drifter_thru_model.pkl'), 'wb'))
     except Exception as e:
         print(e)
         embed()
@@ -119,7 +124,8 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=1110)
     parser.add_argument('--load-dir', default='', help='load partially-complete experiment from this dir')
     parser.add_argument('--model-type', default='OceanDrift', help='type of model', choices=['OceanDrift', 'Leeway'])
-    parser.add_argument('--object-type', default=70, help='type of model', choices=[69, 70, 71, 72]) # bait boxes
+    parser.add_argument('--object-type', default=70, type=int, help='type of model 72 is oil drum, best result', choices=[69, 70, 71, 72]) # bait boxes
+
     parser.add_argument('--num-seeds', default=100, type=int, help='num particles to simulate')
     parser.add_argument('--seed-radius', default=500, type=int, help='meters squared region to seed particles in simulation')
     parser.add_argument('--wind-drift-factor-max', '-wdm', default=0.06, type=float, help='max wind drift factor to use when seeding particles. default was found experimentally with get_wind_drift_factor.py')
@@ -134,7 +140,7 @@ if __name__ == '__main__':
     parser.add_argument('--end-at-drifter', '-ed', action='store_true', default=False, help='end simulation at drifter start')
     parser.add_argument('--plot', action='store_true', default=False, help='write plot')
     parser.add_argument('--gif', action='store_true', default=False, help='write gif')
-    parser.add_argument('--use-ncep', '-n', action='store_true', default=False, help='include ncep data - wind data. download manually to DATA_DIR/ncep/')
+    parser.add_argument('--use-ncss', '-n', action='store_true', default=False, help='include ncss data - current data. download manually to DATA_DIR/ncss/')
     parser.add_argument('--use-ww3', '-w', action='store_true', default=False, help='include ww3 - 8 day wave forecast. download manually to DATA_DIR/ww3/')
     parser.add_argument('--use-gfs', '-g', action='store_true', default=False, help='include gfs - 14 day wind forecast. download manually to DATA_DIR/gfs/')
     parser.add_argument('--use-rtofs', '-r', action='store_true', default=False, help='include rtofs currents (auto download 7 day forecasts to download manually to DATA_DIR/pred/)')
@@ -158,7 +164,7 @@ if __name__ == '__main__':
             model_name = 'WD%.02f_'%(args.wind_drift_factor_max) + args.model_type 
         spot_dir = os.path.join(DATA_DIR, 'results', 'spots_N%s_S%s_E%s_DS%s_DE%s_R%sG%sW%sN%s_%s'%(now_str, 
                                      start_str, end_str, int(args.start_at_drifter), int(args.end_at_drifter), 
-                                     int(args.use_rtofs), int(args.use_gfs), int(args.use_ww3), int(args.use_ncep), 
+                                     int(args.use_rtofs), int(args.use_gfs), int(args.use_ww3), int(args.use_ncss), 
                                      model_name))
         if not os.path.exists(spot_dir):
             os.makedirs(spot_dir)
@@ -179,7 +185,7 @@ if __name__ == '__main__':
     if args.test_spots > 0:
         spot_names = np.random.choice(spot_names, args.test_spots)
     print(spot_names)
-    readers = load_environment(start_time, download=args.download, use_gfs=args.use_gfs, use_ncep=args.use_ncep, use_ww3=args.use_ww3, use_rtofs=args.use_rtofs)
+    readers = load_environment(start_time, download=args.download, use_gfs=args.use_gfs, use_ncss=args.use_ncss, use_ww3=args.use_ww3, use_rtofs=args.use_rtofs)
     for spot in spot_names:
         if not os.path.exists(os.path.join(spot_dir, spot + '.nc')):
             simulate_spot(spot, start_datetime=start_time,  end_datetime=end_time,\

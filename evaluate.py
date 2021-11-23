@@ -114,6 +114,7 @@ def evaluate_spot(spot_df, pred_nc):
             pred_lats.append(pred_nc['lat'][:][:,pred_nearest])
 
         eval_time = eval_time + datetime.timedelta(hours=1) 
+        #eval_time = eval_time + datetime.timedelta(days=1) 
     pred_lons = np.array(pred_lons)
     pred_lats = np.array(pred_lats)
     drifter_lons = np.array(drifter_lons)
