@@ -75,11 +75,19 @@ def make_submission_file(load_dir, data_start_time, data_seed_time, data_eval_ti
         spot = os.path.split(pr)[1].replace('.nc', '')
         if spot in ['SPOT-010057', 'SPOT-1166']:
             continue
-
+        spot_df = track_df[track_df['spotterId'] == spot]
+        s_lats = np.array(spot_df['latitude'])
+        s_lons = np.array(spot_df['longitude'])
+ 
         pred_time_raw = pred_nc['time'][:].data
         pred_time = np.array([t.replace(tzinfo=None) for t in (pd.to_datetime(pred_nc['time'][:], utc=True, unit='s'))])
 
+        
         use_idx = np.random.randint(0, pred_nc['lat'][:].data.shape[0])
+        while not pred_nc['moving'][use_idx].min():
+            print('searching for new idx, that one was stalled', use_idx)
+            use_idx = np.random.randint(0, pred_nc['lat'][:].data.shape[0])
+
         pred_lats = pred_nc['lat'][use_idx].data
         pred_lons = pred_nc['lon'][use_idx].data
         pred_x_wind = pred_nc['x_wind'][use_idx].data
@@ -94,6 +102,7 @@ def make_submission_file(load_dir, data_start_time, data_seed_time, data_eval_ti
         for eval_time in data_eval_times:
             pred_nearest_idx = np.argmin(abs(pred_time-eval_time))
             pred_nearest_ts = pred_time[pred_nearest_idx]
+            #print(pred_nearest_idx, pred_nearest_ts, eval_time)
             pred_diff = pred_nearest_ts - eval_time
 
             if (abs(pred_diff) > datetime.timedelta(hours=3)):
@@ -337,32 +346,38 @@ if __name__ == '__main__':
 #        if not os.path.exists(summary_file):
 #            make_summary_file(d, start_time, seed_time, eval_times)
 
+    track_df = pd.read_csv('track_df.csv')
     preds = []
     for d in load_data_from_dirs:
         df = make_submission_file(d, start_time, seed_time, eval_times)
         preds.append(df)
     
     #track_df, wave_df = load_drifter_data(search_path='data/challenge*day*JSON.json')
-    track_df = pd.read_csv('track_df.csv')
     lat_cols = ['Nov24lat', 'Nov26lat', 'Nov28lat', 'Nov30lat', 'Dec2lat']
     lon_cols = ['Nov24lon', 'Nov26lon', 'Nov28lon', 'Nov30lon', 'Dec2lon']
     for s in list(df['spotterId']):
         try:
             spot_df = track_df[track_df['spotterId'] == s]
-            s_lats = spot_df['latitude']
-            s_lons = spot_df['longitude']
+            s_lats = np.array(spot_df['latitude'])
+            s_lons = np.array(spot_df['longitude'])
+            print(s, s_lats[-1], s_lons[-1])
             plt.figure()
             sidx = preds[0]['spotterId']==s
-            plt.scatter(s_lons, s_lats, label='drifter')
-            plt.scatter(preds[0].loc[sidx, lon_cols], preds[0].loc[sidx, lon_cols], label='Lee71')
-            plt.scatter(preds[1].loc[sidx, lon_cols], preds[1].loc[sidx, lat_cols], label='Lee69')
-            plt.scatter(preds[2].loc[sidx, lon_cols], preds[4].loc[sidx, lat_cols], label='Lee72')
-            plt.scatter(preds[3].loc[sidx, lon_cols], preds[4].loc[sidx, lat_cols], label='Ocean')
+            plt.title(s)
+            plt.scatter(s_lons, s_lats, label='drifter', s=5)
+            plt.scatter([s_lons[0]], [s_lats[0]], label='d-start', marker='o', c='g')
+            plt.scatter([s_lons[-1]], [s_lats[-1]], label='d-end', marker='x', c='r')
+            plt.scatter(preds[0].loc[sidx, lon_cols], preds[0].loc[sidx, lat_cols], label='Lee71', s=8)
+            plt.scatter(preds[1].loc[sidx, lon_cols], preds[1].loc[sidx, lat_cols], label='Lee69', s=8)
+            plt.scatter(preds[2].loc[sidx, lon_cols], preds[2].loc[sidx, lat_cols], label='Lee72', s=8)
+            plt.scatter(preds[3].loc[sidx, lon_cols], preds[3].loc[sidx, lat_cols], label='Ocean', s=8)
             plt.legend()
             plt.savefig('spots/%s-results.png'%s)
+            plt.close()
         except Exception as e:
             embed()
 
+    embed()
 
 #    print('found %s predictions'%len(pred_results))
 #    if len(pred_results):
