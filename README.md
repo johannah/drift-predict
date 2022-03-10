@@ -18,7 +18,7 @@ We provide a link to our dataset described as follows:
 
 - environmental data:   
 |-- [WW3](https://thredds.ucar.edu/thredds/ncss/grib/NCEP/WW3/Global/Best/dataset.html) 3-6 hour current and wind from Nov. 1 - Nov. 28   
-|-- [GFS](https://thredds.ucar.edu/thredds/gfsp5) - (14 day wind forecast from Oct 31 - Dec 3   
+|-- [GFS](https://thredds.ucar.edu/thredds/gfsp5) - 14 day wind forecast from Oct 31 - Dec 3   
 |-- [RTOFS](https://nomads.ncep.noaa.gov/pub/data/nccf/com/rtofs/prod/) - 8 day hourly current forecast from Nov. 21 - Nov. 30    
 
 
@@ -26,8 +26,8 @@ We provide a link to our dataset described as follows:
 
 - clone and install [Opendrift](https://github.com/opendrift/opendrift)   
 - [Download and unzip our collated dataset](https://www.cim.mcgill.ca/~mrl/drift-ncrn/fft-data.zip)   
--- `wget https://www.cim.mcgill.ca/~mrl/drift-ncrn/fft-data.zip`   
--- `unzip fft-data.zip`
+`wget https://www.cim.mcgill.ca/~mrl/drift-ncrn/fft-data.zip`   
+`unzip fft-data.zip`
 
 
 ## To run predictions with ww3 (wave) and gfs (wind) environmental datasets
