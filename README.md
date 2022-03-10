@@ -1,22 +1,40 @@
 # drift-predict
 
+This project was created to participate in the [2021 DARPA Forecasting Floats in Turbulence (FFT) Challenge](https://custom.cvent.com/2EA9DACA6FD445A9B9591C3F0C2F58F0/files/6372c91a68444c3ca8b24703e1cccd8b.pdf). This was a live competition for predicting the trajectories of drifters in the Atlantic Ocean. Teams were given access to real-time drifter positions for 20 days, then asked to predict the destiny of these drifters 10 days in the future. A key limitation in the trajectory forecasting is the availability of high-quality marine forecasts. 
+Since the conclusion of the competitions, we've collated the data we used to enable its use as a benchmark for developing ocean trajectory forecasting models. 
 
+The competition and dataset timeline is as follows: 
+
+Nov. 2, 2021 - data goes live  
+Nov. 22, 2021 - drifter forecasts due  
+Dec. 2, 2021 - results announced 
+
+
+We provide a link to our dataset described as follows: 
+
+- drifter trajectories
+-- train (Nov. 2 - Nov. 21)
+-- test  (Nov. 22 - Dec. 2)
+- environmental data
+-- [ww3](https://thredds.ucar.edu/thredds/ncss/grib/NCEP/WW3/Global/Best/dataset.html) 3-6 hour forecasts
+--- current and wind: Nov. 1 - Nov. 28
+-- [gfs](https://thredds.ucar.edu/thredds/gfsp5) - (14 day wind forecast)
+--- wind: Oct 31 - Dec 3
+-- [RTOFS](https://nomads.ncep.noaa.gov/pub/data/nccf/com/rtofs/prod/) (8 day hourly current forecast) 
+--- current: Nov. 21 - Nov. 30
 
 
 ## Setup
 
-- clone and install our [Opendrift](https://github.com/johannah/opendrift-predict.git)
-- install cdo (`brew install cdo` on osx)
-- set DATA_DIR in utils.py 
+- clone and install [Opendrift](https://github.com/opendrift/opendrift) 
+- [Download and unzip our collated dataset](https://www.cim.mcgill.ca/~mrl/drift-ncrn/fft-data.zip)
+-- `wget https://www.cim.mcgill.ca/~mrl/drift-ncrn/fft-data.zip`   
+-- `unzip fft-data.zip`
 
-## Download data
 
-- TODO add more details
-- download gfs, ww3, nces data if desired (not required) 
+## To run predictions with ww3 (wave) and gfs (wind) environmental datasets
 
-## To run predictions with rtofs (current), ww3 (wave) and gfs (wind) environmental datasets
-
-` python simulate.py -g -w -r --download `
+` python simulate.py -g -w --download `
 
 # To evaluate a simulation, pass the results directory to evaluate.py
 

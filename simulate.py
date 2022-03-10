@@ -13,12 +13,9 @@ import netCDF4 as nc
 import pickle
 import time
 import pytz
-px.set_mapbox_access_token('pk.eyJ1IjoiamgxNzM2IiwiYSI6ImNpaG8wZWNnYjBwcGh0dGx6ZG1mMGl0czAifQ.mhmvIGx34x2fw0s3p9pnaw')
 
 from haversine import haversine, Unit, inverse_haversine, Direction
 from IPython import embed
-# TRY THIS ONE: https://ncss.hycom.org/thredds/ncss/grid/GLBy0.08/
-# https://polar.ncep.noaa.gov/waves/viewer.shtml?-multi_1-US_eastcoast-
 
 from opendrift.readers.reader_current_from_drifter import Reader as DrifterReader
 from opendrift.readers.reader_current_from_track import Reader as TrackReader
@@ -30,7 +27,7 @@ from opendrift.models.openberg import OpenBerg
 from opendrift.models.oceandrift import OceanDrift
 from opendrift.models.leeway import Leeway
 from opendrift.models.physics_methods import wind_drift_factor_from_trajectory, distance_between_trajectories
-from utils import DATA_DIR, download_predictions, load_environment, make_datetimes_from_args
+from utils import load_environment_data, make_datetimes_from_args
 from utils import load_drifter_data, plot_spot_tracks
 
 def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter=False, end_at_drifter=False, plot_plot=False, plot_gif=False, num_seeds=100, seed_radius=10, wind_drift_factor_max=.02, model_type='OceanDrift', object_type=26):
@@ -73,7 +70,7 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
     if np.abs(start_time-drift_ts) > datetime.timedelta(hours=1):
         print("NO NEAR TIME DRIFTER", drift_ts, spot_df.loc[drift_ts]['spotterId'])
         return
-    if end_datetime < start_datetime: 
+    if end_datetime < start_datetime:
         print('ending before starting')
         return
     try:
@@ -89,11 +86,11 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
             ot.seed_elements(start_lon, start_lat, radius=seed_radius, number=num_seeds,
                                    time=start_time.replace(tzinfo=None),
                                    object_type=object_type)
-        ot.run(end_time=end_datetime.replace(tzinfo=None), time_step=datetime.timedelta(hours=1), 
+        ot.run(end_time=end_datetime.replace(tzinfo=None), time_step=datetime.timedelta(hours=1),
                time_step_output=datetime.timedelta(hours=1), outfile=os.path.join(spot_dir, spot + '.nc'))
-        drifter_dict = {'time': timestamps, 'lon': drifter_lons, 'lat': drifter_lats, 
+        drifter_dict = {'time': timestamps, 'lon': drifter_lons, 'lat': drifter_lats,
                 'label': 'CODE Drifter', 'color': 'b', 'linewidth': 2, 'linestyle':':', 'markersize': 40}
-        # Drifter track is shown in red, and simulated trajectories are shown in gray. 
+        # Drifter track is shown in red, and simulated trajectories are shown in gray.
         motion_background = ['x_sea_water_velocity', 'y_sea_water_velocity']
         ot.history.dump(os.path.join(spot_dir, spot+'.npy'))
     except Exception as e:
@@ -118,6 +115,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', default=1110)
     parser.add_argument('--load-dir', default='', help='load partially-complete experiment from this dir')
+    parser.add_argument('--data-dir', default='', help='load environmental and drifter data from this dir')
+    parser.add_argument('--save-dir', default='', help='save results in this dir')
     parser.add_argument('--model-type', default='OceanDrift', help='type of model', choices=['OceanDrift', 'Leeway'])
     parser.add_argument('--object-type', default=70, help='type of model', choices=[69, 70, 71, 72]) # bait boxes
     parser.add_argument('--num-seeds', default=100, type=int, help='num particles to simulate')
@@ -125,19 +124,18 @@ if __name__ == '__main__':
     parser.add_argument('--wind-drift-factor-max', '-wdm', default=0.06, type=float, help='max wind drift factor to use when seeding particles. default was found experimentally with get_wind_drift_factor.py')
     parser.add_argument('--start-year', default=2021, type=int)
     parser.add_argument('--start-month', default=11, type=int)
-    parser.add_argument('--start-day', default=17, type=int)
+    parser.add_argument('--start-day', default=22, type=int)
     parser.add_argument('--start-hour', default=17, type=int)
-    parser.add_argument('--future-days', '-fd', default=16, type=int)
+    parser.add_argument('--future-days', '-fd', default=11, type=int)
     parser.add_argument('--test-spots', default=-1, help='number of random spots to run. if negative, all spots will be evaluated')
-    parser.add_argument('--download', action='store_true', default=False, help='download new data')
     parser.add_argument('--start-at-drifter', '-sd', action='store_true', default=False, help='start simulation at drifter start')
     parser.add_argument('--end-at-drifter', '-ed', action='store_true', default=False, help='end simulation at drifter start')
     parser.add_argument('--plot', action='store_true', default=False, help='write plot')
     parser.add_argument('--gif', action='store_true', default=False, help='write gif')
-    parser.add_argument('--use-ncep', '-n', action='store_true', default=False, help='include ncep data - wind data. download manually to DATA_DIR/ncep/')
-    parser.add_argument('--use-ww3', '-w', action='store_true', default=False, help='include ww3 - 8 day wave forecast. download manually to DATA_DIR/ww3/')
-    parser.add_argument('--use-gfs', '-g', action='store_true', default=False, help='include gfs - 14 day wind forecast. download manually to DATA_DIR/gfs/')
-    parser.add_argument('--use-rtofs', '-r', action='store_true', default=False, help='include rtofs currents (auto download 7 day forecasts to download manually to DATA_DIR/pred/)')
+    parser.add_argument('--use-ncep', '-n', action='store_true', default=False, help='include ncep data - wind data')
+    parser.add_argument('--use-ww3', '-w', action='store_true', default=False, help='include ww3 - 8 day wave forecast')
+    parser.add_argument('--use-gfs', '-g', action='store_true', default=False, help='include gfs - 14 day wind forecast')
+    parser.add_argument('--use-rtofs', '-r', action='store_true', default=False, help='include rtofs current forecasts')
     args = parser.parse_args()
     now = datetime.datetime.now(pytz.UTC)
     # ALL TIMES IN UTC
@@ -152,13 +150,13 @@ if __name__ == '__main__':
     now_str = now.strftime("%Y%m%d-%H%M")
     start_time, start_str, end_time, end_str = make_datetimes_from_args(args)
     if load_from_dir ==  '':
-        if args.model_type == 'Leeway': 
+        if args.model_type == 'Leeway':
             model_name = args.model_type + str(args.object_type)
         else:
-            model_name = 'WD%.02f_'%(args.wind_drift_factor_max) + args.model_type 
-        spot_dir = os.path.join(DATA_DIR, 'results', 'spots_N%s_S%s_E%s_DS%s_DE%s_R%sG%sW%sN%s_%s'%(now_str, 
-                                     start_str, end_str, int(args.start_at_drifter), int(args.end_at_drifter), 
-                                     int(args.use_rtofs), int(args.use_gfs), int(args.use_ww3), int(args.use_ncep), 
+            model_name = 'WD%.02f_'%(args.wind_drift_factor_max) + args.model_type
+        spot_dir = os.path.join(args.save_dir, 'spots_N%s_S%s_E%s_DS%s_DE%s_R%sG%sW%sN%s_%s'%(now_str,
+                                     start_str, end_str, int(args.start_at_drifter), int(args.end_at_drifter),
+                                     int(args.use_rtofs), int(args.use_gfs), int(args.use_ww3), int(args.use_ncep),
                                      model_name))
         if not os.path.exists(spot_dir):
             os.makedirs(spot_dir)
@@ -168,24 +166,22 @@ if __name__ == '__main__':
             pickle.dump(args, open(os.path.join(spot_dir, 'args.pkl'), 'wb'))
 
 
-    # how far do drifters go in 10 days?
-    # TODO find wind drift factor
-    # TODO measure error
-
     #track_df, wave_df = load_drifter_data(search_path='data/challenge*day*JSON.json', start_date=start_time, end_date=end_time)
-    track_df, wave_df = load_drifter_data(search_path='data/challenge*day*JSON.json')
+    #track_df, wave_df = load_drifter_data(search_path='data/challenge*day*JSON.json')
+    track_df = pd.load_csv(os.path.join(args.data_dir, 'challenge_30-day_sofar_20211102_csv.csv'))
+    embed()
     spot_names = sorted(track_df['spotterId'].unique())
     # sample a number for testing
     if args.test_spots > 0:
         spot_names = np.random.choice(spot_names, args.test_spots)
     print(spot_names)
-    readers = load_environment(start_time, download=args.download, use_gfs=args.use_gfs, use_ncep=args.use_ncep, use_ww3=args.use_ww3, use_rtofs=args.use_rtofs)
+    readers = load_environment_data(start_time, use_gfs=args.use_gfs, use_ncep=args.use_ncep, use_ww3=args.use_ww3, use_rtofs=args.use_rtofs)
     for spot in spot_names:
         if not os.path.exists(os.path.join(spot_dir, spot + '.nc')):
             simulate_spot(spot, start_datetime=start_time,  end_datetime=end_time,\
                           start_at_drifter=args.start_at_drifter,  end_at_drifter=args.end_at_drifter, \
-                          plot_plot=args.plot, plot_gif=args.gif, num_seeds=args.num_seeds, 
-                          seed_radius=args.seed_radius, wind_drift_factor_max=args.wind_drift_factor_max, 
+                          plot_plot=args.plot, plot_gif=args.gif, num_seeds=args.num_seeds,
+                          seed_radius=args.seed_radius, wind_drift_factor_max=args.wind_drift_factor_max,
                           model_type=args.model_type, object_type=args.object_type)
 
 
