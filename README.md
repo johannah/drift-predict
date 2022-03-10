@@ -12,12 +12,13 @@ Dec. 2, 2021 - results announced
 
 We provide a link to our dataset described as follows: 
 
-- drifter trajectories
--- train (Nov. 2 - Nov. 21)
--- test  (Nov. 22 - Dec. 2)
-- environmental data: 
-|-- [ww3](https://thredds.ucar.edu/thredds/ncss/grib/NCEP/WW3/Global/Best/dataset.html) 3-6 hour current and wind from Nov. 1 - Nov. 28   
-|-- [gfs](https://thredds.ucar.edu/thredds/gfsp5) - (14 day wind forecast from Oct 31 - Dec 3   
+- drifter trajectories  
+|-- train (Nov. 2 - Nov. 21)  
+|-- test  (Nov. 22 - Dec. 2)  
+
+- environmental data:   
+|-- [WW3](https://thredds.ucar.edu/thredds/ncss/grib/NCEP/WW3/Global/Best/dataset.html) 3-6 hour current and wind from Nov. 1 - Nov. 28   
+|-- [GFS](https://thredds.ucar.edu/thredds/gfsp5) - (14 day wind forecast from Oct 31 - Dec 3   
 |-- [RTOFS](https://nomads.ncep.noaa.gov/pub/data/nccf/com/rtofs/prod/) - 8 day hourly current forecast from Nov. 21 - Nov. 30    
 
 
