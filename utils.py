@@ -68,7 +68,6 @@ def load_environment_data(data_dir, start_time=comp_start_time, use_gfs=True, us
         # 8 day hourly forecast of current
         rtofs_data = GenericReader(os.path.join(data_dir, 'rtofs_11-22.nc'))
         readers.append(rtofs_data)
-
     if use_gfs:
         # GFS 0.5 degree (56km)  (higher res than 1 deg)
         # https://thredds.ucar.edu/thredds/gfsp5 # 14 day

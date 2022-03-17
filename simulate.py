@@ -115,9 +115,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', default=1110)
     parser.add_argument('--load-dir', default='', help='load partially-complete experiment from this dir')
-    parser.add_argument('--data-dir', default='', help='load environmental and drifter data from this dir')
-    parser.add_argument('--save-dir', default='', help='save results in this dir')
-    parser.add_argument('--model-type', default='OceanDrift', help='type of model', choices=['OceanDrift', 'Leeway'])
+    parser.add_argument('--data-dir', default='data', help='load environmental and drifter data from this dir')
+    parser.add_argument('--save-dir', default='results', help='save results in this dir')
+    parser.add_argument('--model-type', default='Leeway', help='type of model', choices=['OceanDrift', 'Leeway'])
     parser.add_argument('--object-type', default=70, help='type of model', choices=[69, 70, 71, 72]) # bait boxes
     parser.add_argument('--num-seeds', default=100, type=int, help='num particles to simulate')
     parser.add_argument('--seed-radius', default=500, type=int, help='meters squared region to seed particles in simulation')
@@ -168,14 +168,16 @@ if __name__ == '__main__':
 
     #track_df, wave_df = load_drifter_data(search_path='data/challenge*day*JSON.json', start_date=start_time, end_date=end_time)
     #track_df, wave_df = load_drifter_data(search_path='data/challenge*day*JSON.json')
-    track_df = pd.load_csv(os.path.join(args.data_dir, 'challenge_30-day_sofar_20211102_csv.csv'))
-    embed()
+    track_df = pd.read_csv(os.path.join(args.data_dir, 'challenge_30-day_sofar_20211102_csv.csv'))
+    track_df['ts'] = track_df['timestamp']
+    track_df['ts_utc'] = pd.to_datetime(track_df['ts'])
+    track_df.index = track_df['ts_utc']
     spot_names = sorted(track_df['spotterId'].unique())
     # sample a number for testing
     if args.test_spots > 0:
         spot_names = np.random.choice(spot_names, args.test_spots)
     print(spot_names)
-    readers = load_environment_data(start_time, use_gfs=args.use_gfs, use_ncep=args.use_ncep, use_ww3=args.use_ww3, use_rtofs=args.use_rtofs)
+    readers = load_environment_data(args.data_dir, start_time, use_gfs=args.use_gfs, use_ncep=args.use_ncep, use_ww3=args.use_ww3, use_rtofs=args.use_rtofs)
     for spot in spot_names:
         if not os.path.exists(os.path.join(spot_dir, spot + '.nc')):
             simulate_spot(spot, start_datetime=start_time,  end_datetime=end_time,\
