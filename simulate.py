@@ -126,7 +126,7 @@ if __name__ == '__main__':
     parser.add_argument('--start-month', default=11, type=int)
     parser.add_argument('--start-day', default=22, type=int)
     parser.add_argument('--start-hour', default=17, type=int)
-    parser.add_argument('--future-days', '-fd', default=11, type=int)
+    parser.add_argument('--future-days', '-fd', default=6, type=int)
     parser.add_argument('--test-spots', default=-1, help='number of random spots to run. if negative, all spots will be evaluated')
     parser.add_argument('--start-at-drifter', '-sd', action='store_true', default=False, help='start simulation at drifter start')
     parser.add_argument('--end-at-drifter', '-ed', action='store_true', default=False, help='end simulation at drifter start')
