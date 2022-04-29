@@ -30,6 +30,30 @@ def make_datetimes_from_args(args):
     end_str = end_time.strftime("%Y%m%d-%H%M")
     return start_time, start_str, end_time, end_str
 
+
+def load_hindcast_environment_data(start=datetime.datetime(2021,12,2), end=datetime.datetime(2021,11,22), load_path='data/hindcast'):
+    dataset_filenames = []
+    #start_date = datetime.datetime.strptime(start.strftime('%Y-%m-%d'),'%Y-%m-%d')
+    #end_date = datetime.datetime.strptime(end.strftime('%Y-%m-%d'),'%Y-%m-%d') + datetime.timedelta(days=1)
+    wind_filenames = glob('{load_path}/wind/*.nc'.format(load_path=load_path))
+    current_filenames = glob('{load_path}/current/*.nc4'.format(load_path=load_path))
+    readers = []
+    remap = {'u-component_of_wind_planetary_boundary':'x_wind',
+              'v-component_of_wind_planetary_boundary':'y_wind',
+              'water_u':'x_sea_water_velocity',
+              'water_v':'y_sea_water_velocity',
+              'Mean_period_of_wind_waves_surface':'sea_surSignificant_height_of_wind_waves_surface',
+              'Significant_height_of_wind_waves_surface':'sea_surface_wave_significant_height',
+              'u-component_of_wind_surface':'x_wind',
+              'v-component_of_wind_surface':'y_wind',
+                  }
+    for wfile in wind_filenames:
+        dataset_filenames.append(wfile)
+        readers.append(GenericReader(wfile, standard_name_mapping=remap))
+    for cfile in current_filenames:
+        readers.append(GenericReader(cfile, standard_name_mapping=remap))
+    return readers
+
 def load_environment_data(data_dir, start_time=comp_start_time, use_gfs=True, use_ncep=False, use_ww3=True, use_rtofs=True):
     # https://polar.ncep.noaa.gov/global/examples/usingpython.shtml
     # 'https://tds.hycom.org/thredds/dodsC/GLBy0.08/latest'

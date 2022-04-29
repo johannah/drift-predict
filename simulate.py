@@ -17,17 +17,11 @@ import pytz
 from haversine import haversine, Unit, inverse_haversine, Direction
 from IPython import embed
 
-from opendrift.readers.reader_current_from_drifter import Reader as DrifterReader
-from opendrift.readers.reader_current_from_track import Reader as TrackReader
-from opendrift.readers.reader_netCDF_CF_generic import Reader as GenericReader
-from opendrift.readers.reader_netCDF_CF_unstructured import Reader as UnstructuredReader
-from opendrift.readers.reader_grib2 import Reader as Grib2Reader
-from opendrift.readers.reader_ROMS_native import Reader as ROMSReader
 from opendrift.models.openberg import OpenBerg
 from opendrift.models.oceandrift import OceanDrift
 from opendrift.models.leeway import Leeway
 from opendrift.models.physics_methods import wind_drift_factor_from_trajectory, distance_between_trajectories
-from utils import load_environment_data, make_datetimes_from_args
+from utils import load_environment_data, make_datetimes_from_args, load_hindcast_environment_data
 from utils import load_drifter_data, plot_spot_tracks
 
 def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter=False, end_at_drifter=False, plot_plot=False, plot_gif=False, num_seeds=100, seed_radius=10, wind_drift_factor_max=.02, model_type='OceanDrift', object_type=26):
@@ -89,7 +83,7 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
         ot.run(end_time=end_datetime.replace(tzinfo=None), time_step=datetime.timedelta(hours=1),
                time_step_output=datetime.timedelta(hours=1), outfile=os.path.join(spot_dir, spot + '.nc'))
         drifter_dict = {'time': timestamps, 'lon': drifter_lons, 'lat': drifter_lats,
-                'label': 'CODE Drifter', 'color': 'b', 'linewidth': 2, 'linestyle':':', 'markersize': 40}
+                        'label': '%s Drifter'%spot, 'color': 'orangered', 'linewidth': 2.2, 'linestyle':':', 'markerstyle':'.', 'markersize': 40}
         # Drifter track is shown in red, and simulated trajectories are shown in gray.
         motion_background = ['x_sea_water_velocity', 'y_sea_water_velocity']
         ot.history.dump(os.path.join(spot_dir, spot+'.npy'))
@@ -101,14 +95,15 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
         #    ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), background=motion_background, buffer=.01, fast=True, cmap='viridis',  trajectory_dict=drifter_dict)
         #except:
         try:
-            ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), buffer=.01, fast=True, cmap='viridis',  trajectory_dict=drifter_dict)
-        except:
-            pass
+            #ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), buffer=.01, fast=True, cmap='viridis',  trajectory_dict=drifter_dict, linewidth=1.3, background=motion_background)
+            ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), buffer=.01, fast=True, cmap='viridis',  drifter=drifter_dict, linewidth=1.3, background=motion_background)
+        except Exception as e:
+            print(e)
     if plot_gif:
         try:
             ot.animation(filename=os.path.join(spot_dir, '%s.gif'%spot), background=motion_background, buffer=.3, fast=True, drifter=drifter_dict, show_trajectories=True, surface_only=True)
-        except:
-            pass
+        except Exception as e:
+            print(e)
 
 if __name__ == '__main__':
     import argparse
@@ -126,10 +121,11 @@ if __name__ == '__main__':
     parser.add_argument('--start-month', default=11, type=int)
     parser.add_argument('--start-day', default=22, type=int)
     parser.add_argument('--start-hour', default=17, type=int)
-    parser.add_argument('--future-days', '-fd', default=6, type=int)
+    parser.add_argument('--future-days', '-fd', default=10, type=int)
     parser.add_argument('--test-spots', default=-1, help='number of random spots to run. if negative, all spots will be evaluated')
     parser.add_argument('--start-at-drifter', '-sd', action='store_true', default=False, help='start simulation at drifter start')
     parser.add_argument('--end-at-drifter', '-ed', action='store_true', default=False, help='end simulation at drifter start')
+    parser.add_argument('--hindcast', action='store_true', default=False, help='use hindcast rather than forecast data')
     parser.add_argument('--plot', action='store_true', default=False, help='write plot')
     parser.add_argument('--gif', action='store_true', default=False, help='write gif')
     parser.add_argument('--use-ncep', '-n', action='store_true', default=False, help='include ncep data - wind data')
@@ -177,7 +173,10 @@ if __name__ == '__main__':
     if args.test_spots > 0:
         spot_names = np.random.choice(spot_names, args.test_spots)
     print(spot_names)
-    readers = load_environment_data(args.data_dir, start_time, use_gfs=args.use_gfs, use_ncep=args.use_ncep, use_ww3=args.use_ww3, use_rtofs=args.use_rtofs)
+    if args.hindcast:
+        readers = load_hindcast_environment_data()
+    else:
+        readers = load_environment_data(args.data_dir, start_time, use_gfs=True, use_ncep=args.use_ncep, use_ww3=args.use_ww3, use_rtofs=True)
     for spot in spot_names:
         if not os.path.exists(os.path.join(spot_dir, spot + '.nc')):
             simulate_spot(spot, start_datetime=start_time,  end_datetime=end_time,\
@@ -185,5 +184,6 @@ if __name__ == '__main__':
                           plot_plot=args.plot, plot_gif=args.gif, num_seeds=args.num_seeds,
                           seed_radius=args.seed_radius, wind_drift_factor_max=args.wind_drift_factor_max,
                           model_type=args.model_type, object_type=args.object_type)
+
 
 
