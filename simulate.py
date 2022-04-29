@@ -89,13 +89,8 @@ def simulate_spot(spot, start_datetime=None, end_datetime=None, start_at_drifter
         ot.history.dump(os.path.join(spot_dir, spot+'.npy'))
     except Exception as e:
         print(e)
-        embed()
     if plot_plot:
-        #try:
-        #    ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), background=motion_background, buffer=.01, fast=True, cmap='viridis',  trajectory_dict=drifter_dict)
-        #except:
         try:
-            #ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), buffer=.01, fast=True, cmap='viridis',  trajectory_dict=drifter_dict, linewidth=1.3, background=motion_background)
             ot.plot(filename=os.path.join(spot_dir, '%s.png'%spot), buffer=.01, fast=True, cmap='viridis',  drifter=drifter_dict, linewidth=1.3, background=motion_background)
         except Exception as e:
             print(e)
