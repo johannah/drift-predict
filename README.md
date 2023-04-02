@@ -39,3 +39,16 @@ We provide a link to our dataset described as follows:
 `python evaluate.py $DATA_DIR/results/spots_N20211121-1530_S20211117-1700_E20211130-1700_DS0_TE0_R1G0W0N0/ `
 
 ![Example Prediction](https://github.com/johannah/drift-predict/blob/jrh_argo/media/example_drift.gif) 
+
+
+
+```
+@misc{drift-ncrn,
+  title = {DRIFT-NCRN: A BENCHMARK DATASET FOR DRIFTER TRAJECTORY PREDICTION},
+  year = {2022},
+  author = {Hansen, Johanna and Virji, Khalil and Manderson, Travis and Meger, David and Dudek, Gregory},
+  publisher = {ICLR},
+  journal = {AI for Earth Science Workshop at ICLR},
+  howpublished = {\url{https://github.com/johannah/drift-predict},
+}
+```
